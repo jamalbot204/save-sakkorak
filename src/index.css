@@ -1,0 +1,120 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+body {
+  background-color: #0c111d; /* Elegant deep-space dark fallback */
+  color: #f3f4f6;
+  overscroll-behavior-y: none;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom smooth scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Pulsing graphics effects */
+@keyframes softPulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+.animate-pulse-slow {
+  animation: softPulse 3s infinite ease-in-out;
+}
+
+/* RTL-friendly Markdown text styling inside chat bubbles */
+.markdown-body {
+  font-family: inherit;
+  text-align: right;
+  direction: rtl;
+}
+.markdown-body p {
+  margin-bottom: 0.5rem;
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body ul, .markdown-body ol {
+  margin-bottom: 0.5rem;
+  padding-right: 1.25rem;
+  padding-left: 0;
+  list-style-position: outside;
+}
+.markdown-body ul {
+  list-style-type: disc;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+}
+.markdown-body li {
+  margin-bottom: 0.25rem;
+}
+.markdown-body li:last-child {
+  margin-bottom: 0;
+}
+.markdown-body strong {
+  font-weight: 700;
+  color: inherit;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+  font-weight: 700;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  color: #fff;
+}
+.markdown-body h1 { font-size: 1.1rem; }
+.markdown-body h2 { font-size: 1rem; }
+.markdown-body h3 { font-size: 0.95rem; }
+.markdown-body code {
+  font-family: var(--font-mono);
+  background-color: rgba(255, 255, 255, 0.15);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  color: #38bdf8; /* sky-400 equivalent */
+}
+.markdown-body pre {
+  background-color: rgba(0, 0, 0, 0.4);
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+  direction: ltr;
+  text-align: left;
+}
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: 0.85rem;
+}

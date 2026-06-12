@@ -1,0 +1,10 @@
+{
+  "name": "Remix: Sokkarak Mazboot 1.4",
+  "description": "A customized mobile-first diabetes management and AI assistant app tailored for patients in Syria.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

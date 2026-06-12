@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sokkarak Mazboot</string>
+    <string name="title_activity_main">Sokkarak Mazboot</string>
+    <string name="package_name">com.sokkarak.mazboot</string>
+    <string name="custom_url_scheme">com.sokkarak.mazboot</string>
+</resources>

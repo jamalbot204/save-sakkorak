@@ -88,7 +88,7 @@ app.get("/api/status", (req, res) => {
 // Gemini AI Chat Proxy Endpoint with local verification & fallback
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, sessionId, attachment } = req.body;
+    const { message, sessionId, attachment, action = 'new', userMessageId, deleteMessageIds } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: "Message content is required" });
@@ -202,9 +202,21 @@ app.post("/api/chat", async (req, res) => {
       query.eq("session_id", sessionId);
     }
     
-    const { data: dbMessages } = await query
+    let { data: dbMessages } = await query
       .order("timestamp", { ascending: true })
       .limit(30);
+
+    // Soft-delete specified messages on regenerate/edit actions
+    if (deleteMessageIds && deleteMessageIds.length > 0) {
+      const now = new Date().toISOString();
+      await supabase
+        .from("chat_messages")
+        .update({ is_deleted: true, updated_at: now })
+        .in("id", deleteMessageIds);
+
+      const deleteSet = new Set(deleteMessageIds);
+      dbMessages = (dbMessages || []).filter((msg: any) => !deleteSet.has(msg.id));
+    }
 
     // Get Active Gemini Key from rotating key pool
     const activeApiKey = KeyPoolManager.getActiveKey();
@@ -299,19 +311,30 @@ app.post("/api/chat", async (req, res) => {
     // Ensure we have a valid session id
     let activeSessionId = sessionId;
     if (!activeSessionId) {
-      const { data: newSession } = await supabase
+      const { data: newSession, error: sessionError } = await supabase
         .from("chat_sessions")
         .insert({ user_id: userId, status: "active" })
         .select()
         .single();
+      if (sessionError) {
+        console.error("[Chat] Failed to create chat session:", sessionError);
+        return res.status(500).json({
+          error: "فشل إنشاء جلسة المحادثة. يرجى المحاولة مرة أخرى."
+        });
+      }
       if (newSession) {
         activeSessionId = newSession.id;
       }
     }
 
+    let modelMessageId: string | null = null;
+
     if (activeSessionId) {
+      const now = new Date().toISOString();
+
       // Log user message
-      await supabase.from("chat_messages").insert({
+      await supabase.from("chat_messages").upsert({
+        ...(userMessageId ? { id: userMessageId } : {}),
         session_id: activeSessionId,
         user_id: userId,
         role: "user",
@@ -319,23 +342,28 @@ app.post("/api/chat", async (req, res) => {
         attachment_name: attachment?.name || null,
         attachment_mime_type: attachment?.mimeType || null,
         attachment_data_url: attachment?.dataUrl || null,
-        timestamp: new Date().toISOString()
+        timestamp: now,
+        updated_at: now
       });
 
       // Log model reply
-      await supabase.from("chat_messages").insert({
+      const { data: modelInsert } = await supabase.from("chat_messages").insert({
         session_id: activeSessionId,
         user_id: userId,
         role: "model",
         content: replyText,
-        timestamp: new Date().toISOString()
-      });
+        timestamp: now,
+        updated_at: now
+      }).select("id").single();
+
+      modelMessageId = modelInsert?.id || null;
     }
 
     return res.json({
       role: "model",
       content: replyText,
-      sessionId: activeSessionId
+      sessionId: activeSessionId,
+      modelMessageId
     });
 
   } catch (error: any) {

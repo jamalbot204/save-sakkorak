@@ -18,6 +18,7 @@ export interface ChatSlice {
   updateChatMessage: (id: string, content: string) => void;
   setActiveSessionId: (id: string | null) => void;
   setGeminiApiKey: (key: string) => void;
+  markMessagesDeleted: (ids: string[]) => void;
 }
 
 export const createChatSlice: StateCreator<
@@ -88,6 +89,17 @@ export const createChatSlice: StateCreator<
 
     setGeminiApiKey: (key) => {
       set({ geminiApiKey: key });
+    },
+
+    markMessagesDeleted: (ids) => {
+      set((state) => {
+        const now = new Date().toISOString();
+        const newDeletes = ids.map(id => ({ id, table: 'chat_messages', updatedAt: now }));
+        setTimeout(triggerBackgroundSync, 500);
+        return {
+          deletedRecords: [...state.deletedRecords, ...newDeletes]
+        };
+      });
     },
   };
 };

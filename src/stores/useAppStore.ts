@@ -53,6 +53,7 @@ export const useAppStore = create<AppStoreState>()(
         waterLogs: state.waterLogs,
         foodLogs: state.foodLogs,
         chatHistory: state.chatHistory,
+        activeSessionId: state.activeSessionId,
         geminiApiKey: state.geminiApiKey,
         lastSyncedAt: state.lastSyncedAt,
         deletedRecords: state.deletedRecords,

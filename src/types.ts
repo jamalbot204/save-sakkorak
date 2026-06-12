@@ -61,6 +61,8 @@ export interface ChatMessage extends SyncableRecord {
   };
 }
 
+export type ChatAction = 'new' | 'regenerate' | 'edit';
+
 export interface UserProfile extends SyncableRecord {
   name: string;
   age: number;

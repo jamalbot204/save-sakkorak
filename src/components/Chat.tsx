@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAppStore } from '../stores/useAppStore';
 import { ChatMessage } from '../types';
 import { AlertCircle } from 'lucide-react';
+import { generateUUID } from '../lib/uuid';
 import { ChatHeader } from './chat/ChatHeader';
 import { ChatWelcome } from './chat/ChatWelcome';
 import { ChatMessageBubble } from './chat/ChatMessageBubble';
@@ -19,6 +20,7 @@ export const Chat: React.FC = () => {
   const setChatHistory = useAppStore((state) => state.setChatHistory);
   const activeSessionId = useAppStore((state) => state.activeSessionId);
   const setActiveSessionId = useAppStore((state) => state.setActiveSessionId);
+  const markMessagesDeleted = useAppStore((state) => state.markMessagesDeleted);
 
   // States
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -129,7 +131,6 @@ export const Chat: React.FC = () => {
     setErrorMessage(null);
     setEditingMessageId(null);
 
-    // Cancel any ongoing generation first
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -137,11 +138,10 @@ export const Chat: React.FC = () => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Capture history BEFORE adding the new message
-    const historyBefore = useAppStore.getState().chatHistory;
+    const userMsgId = generateUUID();
 
-    // Save user message locally
     addChatMessage({
+      id: userMsgId,
       role: 'user',
       content: text,
       attachment: attachment || undefined,
@@ -162,10 +162,10 @@ export const Chat: React.FC = () => {
         },
         body: JSON.stringify({
           message: text,
-          history: historyBefore,
           attachment: attachment,
           sessionId: useAppStore.getState().activeSessionId,
-          keyOverride: useAppStore.getState().geminiApiKey || undefined, 
+          action: 'new',
+          userMessageId: userMsgId,
         }),
         signal: controller.signal,
       });
@@ -181,6 +181,7 @@ export const Chat: React.FC = () => {
       }
 
       addChatMessage({
+        id: data.modelMessageId,
         role: 'model',
         content: data.content,
       });
@@ -213,7 +214,6 @@ export const Chat: React.FC = () => {
 
     setErrorMessage(null);
 
-    // Cancel any ongoing generation first
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -224,7 +224,7 @@ export const Chat: React.FC = () => {
     setIsTyping(true);
 
     let userMsg: ChatMessage | null = null;
-    let historyToUse: ChatMessage[] = [];
+    const idsToDelete: string[] = [];
 
     const lastMsgIndex = currentHist.length - 1;
     const lastMsg = currentHist[lastMsgIndex];
@@ -232,13 +232,13 @@ export const Chat: React.FC = () => {
     if (lastMsg.role === 'model') {
       if (currentHist.length >= 2) {
         userMsg = currentHist[currentHist.length - 2];
-        historyToUse = currentHist.slice(0, currentHist.length - 2);
+        idsToDelete.push(lastMsg.id, userMsg.id);
         const newHistory = currentHist.slice(0, currentHist.length - 1);
         setChatHistory(newHistory);
       }
     } else {
       userMsg = lastMsg;
-      historyToUse = currentHist.slice(0, currentHist.length - 1);
+      idsToDelete.push(userMsg.id);
     }
 
     if (!userMsg) {
@@ -246,6 +246,12 @@ export const Chat: React.FC = () => {
       abortControllerRef.current = null;
       return;
     }
+
+    if (idsToDelete.length > 0) {
+      currentState.markMessagesDeleted(idsToDelete);
+    }
+
+    const userMsgId = generateUUID();
 
     const session = currentState.session;
     const apiBase = (import.meta as any).env.VITE_API_URL || '';
@@ -260,10 +266,11 @@ export const Chat: React.FC = () => {
         },
         body: JSON.stringify({
           message: userMsg.content,
-          history: historyToUse,
           attachment: userMsg.attachment,
           sessionId: currentState.activeSessionId,
-          keyOverride: currentState.geminiApiKey || undefined,
+          action: 'regenerate',
+          userMessageId: userMsgId,
+          deleteMessageIds: idsToDelete,
         }),
         signal: controller.signal,
       });
@@ -279,6 +286,7 @@ export const Chat: React.FC = () => {
       }
 
       addChatMessage({
+        id: data.modelMessageId,
         role: 'model',
         content: data.content,
       });
@@ -296,13 +304,12 @@ export const Chat: React.FC = () => {
       }
       setIsTyping(false);
     }
-  }, [setChatHistory, addChatMessage, setActiveSessionId]);
+  }, [setChatHistory, addChatMessage, setActiveSessionId, markMessagesDeleted]);
 
   const handleSaveAndResubmit = useCallback(async (newContent: string) => {
     if (!newContent.trim()) return;
     const currentHist = useAppStore.getState().chatHistory;
     
-    // Find last user msg safely
     let lastUserMsg: ChatMessage | null = null;
     let userMsgIndex = -1;
     for (let i = currentHist.length - 1; i >= 0; i--) {
@@ -318,7 +325,6 @@ export const Chat: React.FC = () => {
     setEditingMessageId(null);
     setErrorMessage(null);
 
-    // Cancel any ongoing generation first
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -328,10 +334,19 @@ export const Chat: React.FC = () => {
 
     setIsTyping(true);
 
+    const idsToDelete: string[] = [lastUserMsg.id];
+    for (let i = userMsgIndex + 1; i < currentHist.length; i++) {
+      idsToDelete.push(currentHist[i].id);
+    }
+
+    const now = new Date().toISOString();
+    const userMsgId = generateUUID();
     const historyBefore = currentHist.slice(0, userMsgIndex);
-    const updatedUserMsg = { ...lastUserMsg, content: newContent, timestamp: new Date().toISOString() };
+    const updatedUserMsg = { ...lastUserMsg, id: userMsgId, content: newContent, timestamp: now, updatedAt: now };
     const newChatHistory = [...historyBefore, updatedUserMsg];
     setChatHistory(newChatHistory);
+
+    useAppStore.getState().markMessagesDeleted(idsToDelete);
 
     const session = useAppStore.getState().session;
     const apiBase = (import.meta as any).env.VITE_API_URL || '';
@@ -346,10 +361,11 @@ export const Chat: React.FC = () => {
         },
         body: JSON.stringify({
           message: newContent,
-          history: historyBefore,
           attachment: lastUserMsg.attachment,
           sessionId: useAppStore.getState().activeSessionId,
-          keyOverride: useAppStore.getState().geminiApiKey || undefined,
+          action: 'edit',
+          userMessageId: userMsgId,
+          deleteMessageIds: idsToDelete,
         }),
         signal: controller.signal,
       });
@@ -365,6 +381,7 @@ export const Chat: React.FC = () => {
       }
 
       addChatMessage({
+        id: data.modelMessageId,
         role: 'model',
         content: data.content,
       });
@@ -382,7 +399,7 @@ export const Chat: React.FC = () => {
       }
       setIsTyping(false);
     }
-  }, [setChatHistory, addChatMessage, setActiveSessionId]);
+  }, [setChatHistory, addChatMessage, setActiveSessionId, markMessagesDeleted]);
 
   const handleClearChat = useCallback(() => {
     clearChatHistory();

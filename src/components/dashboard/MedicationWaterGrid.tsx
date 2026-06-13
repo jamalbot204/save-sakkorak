@@ -1,9 +1,9 @@
 import React from 'react';
 import { GlassWater, Plus, Pill } from 'lucide-react';
-import { UserProfile, MedicationLog } from '../../types';
+import { Medication, MedicationLog } from '../../types';
 
 interface MedicationWaterGridProps {
-  userProfile: UserProfile | null;
+  medications: Medication[];
   medicationLogs: MedicationLog[];
   today: string;
   waterCount: number;
@@ -16,7 +16,7 @@ interface MedicationWaterGridProps {
 }
 
 export const MedicationWaterGrid = React.memo(({
-  userProfile,
+  medications,
   medicationLogs,
   today,
   waterCount,
@@ -27,16 +27,14 @@ export const MedicationWaterGrid = React.memo(({
 }: MedicationWaterGridProps) => {
   const waterPct = Math.min((waterCount / targetWater) * 100, 100);
 
-  // Compute total medication slots/tasks loaded
   const totalSlots = React.useMemo(() => {
-    return userProfile?.medications?.reduce((acc, med) => acc + (med.timeSlots?.length || 0), 0) || 0;
-  }, [userProfile]);
+    return medications?.reduce((acc, med) => acc + (med.timeSlots?.length || 0), 0) || 0;
+  }, [medications]);
 
-  // Compute successfully taken tasks for today
   const takenSlotsCount = React.useMemo(() => {
-    if (!userProfile?.medications) return 0;
+    if (!medications) return 0;
     let count = 0;
-    userProfile.medications.forEach(med => {
+    medications.forEach(med => {
       med.timeSlots.forEach(slot => {
         const isLogged = medicationLogs.some(
           log => log.medicationId === med.id && log.timeSlot === slot && log.loggedAt.startsWith(today)
@@ -45,7 +43,7 @@ export const MedicationWaterGrid = React.memo(({
       });
     });
     return count;
-  }, [userProfile, medicationLogs, today]);
+  }, [medications, medicationLogs, today]);
 
   return (
     <div className="grid grid-cols-2 gap-4 shrink-0">

@@ -182,7 +182,7 @@ export class NotificationService {
       return;
     }
 
-    const medications = profile.medications || [];
+    const medications = state.healthData?.medications || [];
     const medicationTimes = profile.medicationTimes || {
       Breakfast: '08:00 AM',
       Lunch: '01:00 PM',
@@ -218,7 +218,7 @@ export class NotificationService {
 
         // Check if this timeslot was already taken (logged) today
         const todayStr = new Date().toLocaleDateString('en-CA');
-        const logs = state.medicationLogs || [];
+        const logs = state.healthData?.medicationLogs || [];
         const isLoggedToday = logs.some(
           (log) =>
             log.medicationId === med.id &&

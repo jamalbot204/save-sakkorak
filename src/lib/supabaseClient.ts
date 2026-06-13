@@ -9,9 +9,9 @@ let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
 export function getSupabase() {
   if (!supabaseInstance) {
-    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-    const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
-    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn("[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Using mock placeholder client.");
       // Graceful mock client so compilation and first render work without crashes

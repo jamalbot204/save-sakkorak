@@ -43,15 +43,15 @@ export default function App() {
             const timeSlot = res.timeSlot;
             
             // Look up in profile for safest name/dosage Match
-            const profile = useAppStore.getState().userProfile;
-            const medInProfile = profile?.medications?.find((m) => m.id === medicationId);
+            const healthData = useAppStore.getState().healthData;
+            const medInProfile = healthData?.medications?.find((m) => m.id === medicationId);
             
             const medName = medInProfile?.name || res.medicationName || 'دواء السكري';
             const medDosage = medInProfile?.dosage || res.dosage || '';
 
             // Check if already logged today
             const today = new Date().toLocaleDateString('en-CA');
-            const logs = useAppStore.getState().medicationLogs;
+            const logs = healthData?.medicationLogs || [];
             const isLogged = logs.some(
               (l) =>
                 l.medicationId === medicationId &&
@@ -122,7 +122,7 @@ export default function App() {
         console.error('[App] Error scheduling reminders:', err);
       });
     }
-  }, [isInitialized, userProfile?.isOnboarded, userProfile?.medications, userProfile?.medicationTimes]);
+  }, [isInitialized, userProfile?.isOnboarded, useAppStore.getState().healthData.medications, userProfile?.medicationTimes]);
 
   // 1. Render Splash Screen
   if (showSplash || !isInitialized) {

@@ -26,7 +26,7 @@ type StatusFilter = 'all' | 'low' | 'normal' | 'high';
 type RelationFilter = 'all' | 'fasting' | 'before-meal' | 'post-meal' | 'bedtime' | 'random';
 
 export const ExtendedGlucoseModal: React.FC<ExtendedGlucoseModalProps> = ({ onClose }) => {
-  const glucoseReadings = useAppStore((state) => state.glucoseReadings);
+  const glucoseReadings = useAppStore((state) => state.healthData.glucoseReadings);
   const deleteGlucoseReading = useAppStore((state) => state.deleteGlucoseReading);
 
   // Filter States

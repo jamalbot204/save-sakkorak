@@ -4,12 +4,14 @@
  */
 
 import { StateCreator } from 'zustand';
+import { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '../../lib/supabaseClient';
 import { AppStoreState } from '../useAppStore';
+import { localTimestamp } from '../../lib/datetime';
 
 export interface AuthSlice {
-  session: any | null;
-  user: any | null;
+  session: Session | null;
+  user: User | null;
   signUp: (email: string) => Promise<{ success: boolean; message: string }>;
   sendMagicLink: (email: string) => Promise<{ success: boolean; message: string }>;
   sendOtpCode: (email: string) => Promise<{ success: boolean; message: string }>;
@@ -120,12 +122,18 @@ export const createAuthSlice: StateCreator<
     const mockUser = {
       id: 'mock-user-id',
       email: 'demo.user@example.com',
-      user_metadata: { name: 'مستخدم تجريبي' }
+      app_metadata: {},
+      user_metadata: { name: 'مستخدم تجريبي' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
     };
-    const mockSession = {
+    const mockSession: Session = {
       access_token: 'mock-token',
-      user: mockUser,
-      expires_at: 1e15
+      refresh_token: 'mock-refresh',
+      expires_in: 1e15,
+      expires_at: 1e15,
+      token_type: 'bearer',
+      user: mockUser as User,
     };
     set({ 
       session: mockSession, 
@@ -138,8 +146,7 @@ export const createAuthSlice: StateCreator<
         diabetesType: 'type2',
         comorbidities: [],
         medicationTimes: { Breakfast: '08:00', Lunch: '14:00', Dinner: '20:00', Bedtime: '22:00' },
-        medications: [],
-        updatedAt: new Date().toISOString()
+        updatedAt: localTimestamp()
       }
     });
   },

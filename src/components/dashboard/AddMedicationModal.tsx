@@ -5,6 +5,7 @@ import { Medication } from '../../types';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import { generateUUID } from '../../lib/uuid';
+import { localTimestamp } from '../../lib/datetime';
 
 const ScrollPicker = ({ items, value, onChange, width = 'w-14' }: { items: string[], value: string, onChange: (val: string) => void, width?: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -126,7 +127,7 @@ export const AddMedicationModal: React.FC<AddMedicationModalProps> = ({ onClose,
       dosage: currentMedDosage.trim() || 'طبيعي',
       frequency: currentMedFreq,
       timeSlots: finalSlots,
-      updatedAt: new Date().toISOString(),
+      updatedAt: localTimestamp(),
     };
     onSave(newMed);
   }, [currentMedName, currentMedDosage, currentMedFreq, method, selectedSlots, customTimes, onSave]);

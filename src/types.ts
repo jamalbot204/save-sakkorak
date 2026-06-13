@@ -51,6 +51,7 @@ export interface FoodLog extends SyncableRecord {
 
 export interface ChatMessage extends SyncableRecord {
   id: string;
+  sessionId?: string;
   role: 'user' | 'model';
   content: string;
   timestamp: string;
@@ -61,7 +62,13 @@ export interface ChatMessage extends SyncableRecord {
   };
 }
 
-export type ChatAction = 'new' | 'regenerate' | 'edit';
+export interface HealthData {
+  medications: Medication[];
+  glucoseReadings: GlucoseReading[];
+  medicationLogs: MedicationLog[];
+  foodLogs: FoodLog[];
+  waterLogs: Record<string, number>;
+}
 
 export interface UserProfile extends SyncableRecord {
   name: string;
@@ -69,7 +76,6 @@ export interface UserProfile extends SyncableRecord {
   gender: 'male' | 'female' | 'other';
   diabetesType: 'type1' | 'type2' | 'gestational' | 'prediabetes';
   comorbidities: string[]; // e.g., 'Hypertension', 'Dyslipidemia'
-  medications: Medication[];
   medicationTimes: {
     Breakfast: string; // e.g. "08:00 AM"
     Lunch: string; // e.g. "01:00 PM"

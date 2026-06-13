@@ -11,6 +11,7 @@ import { ProgressBar } from './onboarding/ProgressBar';
 
 export const Onboarding: React.FC = () => {
   const setUserProfile = useAppStore((state) => state.setUserProfile);
+  const addMedication = useAppStore((state) => state.addMedication);
   
   const [step, setStep] = useState<number>(1);
   const [name, setName] = useState<string>('');
@@ -62,12 +63,12 @@ export const Onboarding: React.FC = () => {
       gender,
       diabetesType,
       comorbidities: selectedComorbidities,
-      medications,
       medicationTimes,
       isOnboarded: true,
     };
     setUserProfile(profile);
-  }, [name, age, gender, diabetesType, selectedComorbidities, medications, medicationTimes, setUserProfile]);
+    medications.forEach((med) => addMedication(med));
+  }, [name, age, gender, diabetesType, selectedComorbidities, medications, medicationTimes, setUserProfile, addMedication]);
 
   return (
     <div className="flex-1 flex flex-col p-6 overflow-y-auto selection:bg-emerald-500/20">

@@ -156,7 +156,7 @@ MedicationStatusBadge.displayName = 'MedicationStatusBadge';
 
 export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ onClose, onSaveMedication }) => {
   const userProfile = useAppStore((state) => state.userProfile);
-  const medicationLogs = useAppStore((state) => state.medicationLogs);
+  const healthData = useAppStore((state) => state.healthData);
   const toggleMedicationLog = useAppStore((state) => state.toggleMedicationLog);
 
   const [showAddInModal, setShowAddInModal] = useState<boolean>(false);
@@ -207,7 +207,7 @@ export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ 
 
   // Construct structured day schedules for medications
   const medicationsList = useMemo(() => {
-    const meds = userProfile?.medications || [];
+    const meds = healthData.medications || [];
     const result: Array<{
       id: string;
       medication: Medication;
@@ -222,14 +222,14 @@ export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ 
     meds.forEach((med) => {
       const slots = med.timeSlots || [];
       slots.forEach((slot) => {
-        const isLogged = medicationLogs.some(
+        const isLogged = healthData.medicationLogs.some(
           (log) =>
             log.medicationId === med.id &&
             log.timeSlot === slot &&
             log.loggedAt.startsWith(selectedDate)
         );
         
-        const matchingLog = medicationLogs.find(
+        const matchingLog = healthData.medicationLogs.find(
           (log) =>
             log.medicationId === med.id &&
             log.timeSlot === slot &&
@@ -257,7 +257,7 @@ export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ 
       const tB = b.parsedTime ? b.parsedTime.hour * 60 + b.parsedTime.minute : 9999;
       return tA - tB;
     });
-  }, [userProfile, medicationLogs, selectedDate, getSlotTimeStr]);
+  }, [healthData, selectedDate, getSlotTimeStr]);
 
   // Find closer/next medication relative to the current render period
   const nearestMedication = useMemo(() => {

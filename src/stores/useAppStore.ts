@@ -48,15 +48,11 @@ export const useAppStore = create<AppStoreState>()(
       partialize: (state) => ({
         deviceId: state.deviceId,
         userProfile: state.userProfile,
-        glucoseReadings: state.glucoseReadings,
-        medicationLogs: state.medicationLogs,
-        waterLogs: state.waterLogs,
-        foodLogs: state.foodLogs,
+        healthData: state.healthData,
         chatHistory: state.chatHistory,
         activeSessionId: state.activeSessionId,
-        geminiApiKey: state.geminiApiKey,
         lastSyncedAt: state.lastSyncedAt,
-        deletedRecords: state.deletedRecords,
+        healthDataUpdatedAt: state.healthDataUpdatedAt,
       }),
     }
   )

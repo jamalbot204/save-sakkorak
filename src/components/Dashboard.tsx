@@ -18,10 +18,7 @@ import { Medication } from '../types';
 
 export const Dashboard: React.FC = () => {
   const userProfile = useAppStore((state) => state.userProfile);
-  const glucoseReadings = useAppStore((state) => state.glucoseReadings);
-  const medicationLogs = useAppStore((state) => state.medicationLogs);
-  const waterLogs = useAppStore((state) => state.waterLogs);
-  const foodLogs = useAppStore((state) => state.foodLogs);
+  const healthData = useAppStore((state) => state.healthData);
 
   // جلب حالات المزامنة من Zustand Store
   const isSyncing = useAppStore((state) => state.isSyncing);
@@ -94,7 +91,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const today = new Date().toLocaleDateString('en-CA');
-  const waterCount = waterLogs[today] || 0;
+  const waterCount = healthData.waterLogs[today] || 0;
   const targetWater = 10;
 
   const handleSaveGlucose = useCallback((
@@ -135,7 +132,7 @@ export const Dashboard: React.FC = () => {
     }
   }, [addMedication]);
 
-  const latestReading = glucoseReadings[0];
+  const latestReading = healthData.glucoseReadings[0];
 
   return (
     <div className="flex-1 p-5 pb-8 space-y-5 flex flex-col justify-start overflow-y-auto min-h-0">
@@ -149,14 +146,14 @@ export const Dashboard: React.FC = () => {
 
       <BloodGlucoseCard 
         latestReading={latestReading} 
-        glucoseReadings={glucoseReadings} 
+        glucoseReadings={healthData.glucoseReadings} 
         onShowLogModal={handleOpenLogModal} 
         onShowDetailedModal={handleOpenDetailedModal}
       />
 
       <MedicationWaterGrid 
-        userProfile={userProfile}
-        medicationLogs={medicationLogs}
+        medications={healthData.medications}
+        medicationLogs={healthData.medicationLogs}
         today={today}
         waterCount={waterCount}
         targetWater={targetWater}
@@ -168,7 +165,7 @@ export const Dashboard: React.FC = () => {
       />
 
       <FoodLogger 
-        foodLogs={foodLogs} 
+        foodLogs={healthData.foodLogs} 
         onAddFoodLog={handleAddFoodLog} 
       />
 

@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { BriefcaseMedical, Plus, Trash2 } from 'lucide-react';
 import { Medication } from '../../types';
 import { generateUUID } from '../../lib/uuid';
+import { localTimestamp } from '../../lib/datetime';
 
 interface MedicationsStepProps {
   medications: Medication[];
@@ -36,7 +37,7 @@ export const MedicationsStep = React.memo(({ medications, onAddMedication, onRem
       dosage: currentMedDosage || 'طبيعي',
       frequency: currentMedFreq,
       timeSlots: selectedSlots,
-      updatedAt: new Date().toISOString(),
+      updatedAt: localTimestamp(),
     };
     onAddMedication(newMed);
     setCurrentMedName('');

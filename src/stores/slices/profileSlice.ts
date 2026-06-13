@@ -5,15 +5,14 @@
 
 import { StateCreator } from 'zustand';
 import { AppStoreState } from '../useAppStore';
-import { UserProfile, Medication } from '../../types';
+import { UserProfile } from '../../types';
 import { generateUUID } from '../../lib/uuid';
+import { localTimestamp } from '../../lib/datetime';
 
 export interface ProfileSlice {
   deviceId: string;
   userProfile: UserProfile | null;
   setUserProfile: (profile: UserProfile) => void;
-  addMedication: (medication: Medication) => void;
-  deleteMedication: (id: string) => void;
 }
 
 export const createProfileSlice: StateCreator<
@@ -35,41 +34,9 @@ export const createProfileSlice: StateCreator<
     userProfile: null,
 
     setUserProfile: (profile) => {
-      const now = new Date().toISOString();
+      const now = localTimestamp();
       set({ userProfile: { ...profile, updatedAt: now } });
       setTimeout(triggerBackgroundSync, 500);
-    },
-
-    addMedication: (medication) => {
-      set((state) => {
-        if (!state.userProfile) return state;
-        const now = new Date().toISOString();
-        const newMed = { ...medication, updatedAt: now };
-        const updatedProfile = {
-          ...state.userProfile,
-          medications: [...(state.userProfile.medications || []), newMed],
-          updatedAt: now
-        };
-        setTimeout(triggerBackgroundSync, 500);
-        return { userProfile: updatedProfile };
-      });
-    },
-
-    deleteMedication: (id) => {
-      set((state) => {
-        if (!state.userProfile) return state;
-        const now = new Date().toISOString();
-        const updatedProfile = {
-          ...state.userProfile,
-          medications: (state.userProfile.medications || []).filter((m) => m.id !== id),
-          updatedAt: now
-        };
-        setTimeout(triggerBackgroundSync, 500);
-        return { 
-          userProfile: updatedProfile,
-          deletedRecords: [...state.deletedRecords, { id, table: 'medications', updatedAt: now }]
-        };
-      });
     },
   };
 };

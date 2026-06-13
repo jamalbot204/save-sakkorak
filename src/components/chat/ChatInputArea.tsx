@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Paperclip, Send, Image, Camera, X, Mic, Square, FolderOpen } from 'lucide-react';
+import { Paperclip, Send, Camera, X, Mic, Square, FolderOpen } from 'lucide-react';
 import { Camera as CapCamera, CameraResultType, CameraSource, CameraDirection } from '@capacitor/camera';
 import { BottomSheet } from '../common/BottomSheet';
 import { AndroidSettingsEx } from '../../plugins/AndroidSettingsEx';

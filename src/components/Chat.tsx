@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAppStore } from '../stores/useAppStore';
 import { ChatMessage } from '../types';
-import { AlertCircle } from 'lucide-react';
 import { generateUUID } from '../lib/uuid';
+import { localTimestamp } from '../lib/datetime';
+import { AlertCircle } from 'lucide-react';
 import { ChatHeader } from './chat/ChatHeader';
 import { ChatWelcome } from './chat/ChatWelcome';
 import { ChatMessageBubble } from './chat/ChatMessageBubble';
@@ -15,12 +16,8 @@ import { ChatInputArea } from './chat/ChatInputArea';
 
 export const Chat: React.FC = () => {
   const chatHistory = useAppStore((state) => state.chatHistory);
-  const addChatMessage = useAppStore((state) => state.addChatMessage);
-  const clearChatHistory = useAppStore((state) => state.clearChatHistory);
   const setChatHistory = useAppStore((state) => state.setChatHistory);
-  const activeSessionId = useAppStore((state) => state.activeSessionId);
   const setActiveSessionId = useAppStore((state) => state.setActiveSessionId);
-  const markMessagesDeleted = useAppStore((state) => state.markMessagesDeleted);
 
   // States
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -62,12 +59,14 @@ export const Chat: React.FC = () => {
     };
   }, []);
 
-  const lastUserMessageIndex = (() => {
-    for (let i = chatHistory.length - 1; i >= 0; i--) {
-      if (chatHistory[i].role === 'user') return i;
+  const findLastUserIndex = useCallback((hist: ChatMessage[]): number => {
+    for (let i = hist.length - 1; i >= 0; i--) {
+      if (hist[i].role === 'user') return i;
     }
     return -1;
-  })();
+  }, []);
+
+  const lastUserMessageIndex = useMemo(() => findLastUserIndex(chatHistory), [chatHistory, findLastUserIndex]);
 
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
@@ -125,290 +124,316 @@ export const Chat: React.FC = () => {
     return () => ro.disconnect();
   }, []);
 
-  const handleSendMessage = useCallback(async (text: string, attachment: any = null) => {
+  const submitChatRequest = useCallback(async (
+    chatHistory: ChatMessage[],
+    sessionId: string,
+    controller: AbortController
+  ): Promise<{ content: string; messageId: string; sessionId: string }> => {
+    const state = useAppStore.getState();
+    const session = state.session;
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    const chatUrl = apiBase ? (apiBase.endsWith('/') ? `${apiBase}api/chat` : `${apiBase}/api/chat`) : '/api/chat';
+
+    const response = await fetch(chatUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        sessionId,
+        chatHistory,
+        profile: state.userProfile ? {
+          age: state.userProfile.age,
+          gender: state.userProfile.gender,
+          diabetesType: state.userProfile.diabetesType,
+          comorbidities: state.userProfile.comorbidities,
+        } : null,
+        healthData: {
+          medications: state.healthData?.medications || [],
+          glucoseReadings: state.healthData?.glucoseReadings || [],
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(!response.ok ? `Server error (${response.status})` : text);
+    }
+
+    if (!response.ok) {
+      throw new Error(data.error || `Server error (${response.status})`);
+    }
+
+    return data;
+  }, []);
+
+  const handleSendMessage = useCallback(async (text: string, attachment: ChatMessage['attachment'] = null) => {
     if (!text.trim() && !attachment) return;
 
     setErrorMessage(null);
     setEditingMessageId(null);
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    if (abortControllerRef.current) { abortControllerRef.current.abort(); }
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const userMsgId = generateUUID();
-
-    addChatMessage({
-      id: userMsgId,
+    const optimisticMsg: ChatMessage = {
+      id: generateUUID(),
       role: 'user',
       content: text,
-      attachment: attachment || undefined,
-    });
+      timestamp: localTimestamp(),
+      attachment: attachment,
+    };
 
+    const currentState = useAppStore.getState();
+    const currentHistory = currentState.chatHistory;
+    let sessionId = currentState.activeSessionId;
+
+    if (!sessionId) {
+      sessionId = generateUUID();
+      setActiveSessionId(sessionId);
+    }
+
+    const updatedHistory = [...currentHistory, optimisticMsg];
+    setChatHistory(updatedHistory);
     setIsTyping(true);
 
-    const session = useAppStore.getState().session;
-    const apiBase = (import.meta as any).env.VITE_API_URL || '';
-    const chatUrl = apiBase ? (apiBase.endsWith('/') ? `${apiBase}api/chat` : `${apiBase}/api/chat`) : '/api/chat';
-
     try {
-      const response = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: text,
-          attachment: attachment,
-          sessionId: useAppStore.getState().activeSessionId,
-          action: 'new',
-          userMessageId: userMsgId,
-        }),
-        signal: controller.signal,
-      });
+      const result = await submitChatRequest(updatedHistory, sessionId, controller);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'حدث خطأ أثناء التواصل مع سيرفر السكري الذكي.');
-      }
-
-      if (data.sessionId) {
-        setActiveSessionId(data.sessionId);
-      }
-
-      addChatMessage({
-        id: data.modelMessageId,
+      const modelMsg: ChatMessage = {
+        id: result.messageId,
         role: 'model',
-        content: data.content,
-      });
+        content: result.content,
+        timestamp: localTimestamp(),
+      };
+
+      setChatHistory([...updatedHistory, modelMsg]);
 
     } catch (err: any) {
+      if (abortControllerRef.current !== controller) return;
       if (err.name === 'AbortError') {
-        console.log('Sending message aborted by user.');
         setErrorMessage('تم إلغاء توليد الإجابة من قبلك.');
       } else {
-        console.error(err);
-        setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري. يرجى مراجعة الإعدادات ومفتاح API.');
+        setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري.');
       }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
+        setIsTyping(false);
       }
-      setIsTyping(false);
     }
-  }, [addChatMessage, setActiveSessionId]);
+  }, [setChatHistory, setActiveSessionId, submitChatRequest]);
 
   const handleQuickPrompt = useCallback((promptText: string) => {
     handleSendMessage(promptText);
   }, [handleSendMessage]);
 
-  const handleRegenerateAndResubmit = useCallback(async () => {
-    const currentState = useAppStore.getState();
-    const currentHist = currentState.chatHistory;
-    
-    if (currentHist.length === 0) return;
+  const handleRetry = useCallback(() => {
+    const currentHist = useAppStore.getState().chatHistory;
+
+    const lastUserIdx = findLastUserIndex(currentHist);
+    if (lastUserIdx === -1) return;
+    if (lastUserIdx < currentHist.length - 1) {
+      setErrorMessage('هذه الرسالة تم الرد عليها بالفعل.');
+      return;
+    }
 
     setErrorMessage(null);
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
+    if (abortControllerRef.current) { abortControllerRef.current.abort(); }
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     setIsTyping(true);
 
-    let userMsg: ChatMessage | null = null;
-    const idsToDelete: string[] = [];
+    const sessionId = useAppStore.getState().activeSessionId;
+    if (!sessionId) { setIsTyping(false); return; }
 
-    const lastMsgIndex = currentHist.length - 1;
-    const lastMsg = currentHist[lastMsgIndex];
+    submitChatRequest(currentHist, sessionId, controller)
+      .then((result) => {
+        const modelMsg: ChatMessage = {
+          id: result.messageId,
+          role: 'model',
+          content: result.content,
+          timestamp: localTimestamp(),
+        };
+        setChatHistory([...currentHist, modelMsg]);
+      })
+      .catch((err: any) => {
+        if (abortControllerRef.current !== controller) return;
+        if (err.name === 'AbortError') {
+          setErrorMessage('تم إلغاء توليد الإجابة من قبلك.');
+        } else {
+          setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري.');
+        }
+      })
+      .finally(() => {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+          setIsTyping(false);
+        }
+      });
+  }, [findLastUserIndex, setChatHistory, submitChatRequest]);
 
-    if (lastMsg.role === 'model') {
-      if (currentHist.length >= 2) {
-        userMsg = currentHist[currentHist.length - 2];
-        idsToDelete.push(lastMsg.id, userMsg.id);
-        const newHistory = currentHist.slice(0, currentHist.length - 1);
-        setChatHistory(newHistory);
-      }
-    } else {
-      userMsg = lastMsg;
-      idsToDelete.push(userMsg.id);
-    }
+  const handleRegenerate = useCallback(async () => {
+    const currentState = useAppStore.getState();
+    const currentHist = currentState.chatHistory;
+    if (currentHist.length === 0) return;
 
-    if (!userMsg) {
-      setIsTyping(false);
-      abortControllerRef.current = null;
+    const lastUserIdx = findLastUserIndex(currentHist);
+    if (lastUserIdx === -1) return;
+
+    const hasPairedReply =
+      lastUserIdx + 1 < currentHist.length &&
+      currentHist[lastUserIdx + 1].role === 'model';
+
+    if (!hasPairedReply) {
+      handleRetry();
       return;
     }
 
-    if (idsToDelete.length > 0) {
-      currentState.markMessagesDeleted(idsToDelete);
-    }
+    setErrorMessage(null);
 
-    const userMsgId = generateUUID();
+    if (abortControllerRef.current) { abortControllerRef.current.abort(); }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    const session = currentState.session;
-    const apiBase = (import.meta as any).env.VITE_API_URL || '';
-    const chatUrl = apiBase ? (apiBase.endsWith('/') ? `${apiBase}api/chat` : `${apiBase}/api/chat`) : '/api/chat';
+    setIsTyping(true);
+
+    const sendHistory = [...currentHist.slice(0, lastUserIdx + 1)];
+    setChatHistory(sendHistory);
+
+    const sessionId = currentState.activeSessionId;
+    if (!sessionId) { setIsTyping(false); return; }
 
     try {
-      const response = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: userMsg.content,
-          attachment: userMsg.attachment,
-          sessionId: currentState.activeSessionId,
-          action: 'regenerate',
-          userMessageId: userMsgId,
-          deleteMessageIds: idsToDelete,
-        }),
-        signal: controller.signal,
-      });
+      const result = await submitChatRequest(sendHistory, sessionId, controller);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'حدث خطأ أثناء التواصل مع سيرفر السكري الذكي.');
-      }
-
-      if (data.sessionId) {
-        setActiveSessionId(data.sessionId);
-      }
-
-      addChatMessage({
-        id: data.modelMessageId,
+      const modelMsg: ChatMessage = {
+        id: result.messageId,
         role: 'model',
-        content: data.content,
-      });
+        content: result.content,
+        timestamp: localTimestamp(),
+      };
+
+      setChatHistory([...sendHistory, modelMsg]);
+
     } catch (err: any) {
+      if (abortControllerRef.current !== controller) return;
       if (err.name === 'AbortError') {
-        console.log('Regenerating message aborted by user.');
         setErrorMessage('تم إلغاء توليد الإجابة من قبلك.');
       } else {
-        console.error(err);
-        setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري. يرجى مراجعة الإعدادات ومفتاح API.');
+        setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري.');
       }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
+        setIsTyping(false);
       }
-      setIsTyping(false);
     }
-  }, [setChatHistory, addChatMessage, setActiveSessionId, markMessagesDeleted]);
+  }, [handleRetry, setChatHistory, submitChatRequest]);
 
   const handleSaveAndResubmit = useCallback(async (newContent: string) => {
     if (!newContent.trim()) return;
     const currentHist = useAppStore.getState().chatHistory;
-    
-    let lastUserMsg: ChatMessage | null = null;
-    let userMsgIndex = -1;
-    for (let i = currentHist.length - 1; i >= 0; i--) {
-      if (currentHist[i].role === 'user') {
-         lastUserMsg = currentHist[i];
-         userMsgIndex = i;
-         break;
-      }
-    }
 
-    if (!lastUserMsg || userMsgIndex === -1) return;
+    const userMsgIndex = findLastUserIndex(currentHist);
+    if (userMsgIndex === -1) return;
 
     setEditingMessageId(null);
     setErrorMessage(null);
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
+    if (abortControllerRef.current) { abortControllerRef.current.abort(); }
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     setIsTyping(true);
 
-    const idsToDelete: string[] = [lastUserMsg.id];
-    for (let i = userMsgIndex + 1; i < currentHist.length; i++) {
-      idsToDelete.push(currentHist[i].id);
-    }
+    const updatedUserMsg = { ...currentHist[userMsgIndex], content: newContent };
+    const sendHistory = [...currentHist.slice(0, userMsgIndex), updatedUserMsg];
 
-    const now = new Date().toISOString();
-    const userMsgId = generateUUID();
-    const historyBefore = currentHist.slice(0, userMsgIndex);
-    const updatedUserMsg = { ...lastUserMsg, id: userMsgId, content: newContent, timestamp: now, updatedAt: now };
-    const newChatHistory = [...historyBefore, updatedUserMsg];
-    setChatHistory(newChatHistory);
+    setChatHistory(sendHistory);
 
-    useAppStore.getState().markMessagesDeleted(idsToDelete);
-
-    const session = useAppStore.getState().session;
-    const apiBase = (import.meta as any).env.VITE_API_URL || '';
-    const chatUrl = apiBase ? (apiBase.endsWith('/') ? `${apiBase}api/chat` : `${apiBase}/api/chat`) : '/api/chat';
+    const sessionId = useAppStore.getState().activeSessionId;
+    if (!sessionId) { setIsTyping(false); return; }
 
     try {
-      const response = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: newContent,
-          attachment: lastUserMsg.attachment,
-          sessionId: useAppStore.getState().activeSessionId,
-          action: 'edit',
-          userMessageId: userMsgId,
-          deleteMessageIds: idsToDelete,
-        }),
-        signal: controller.signal,
-      });
+      const result = await submitChatRequest(sendHistory, sessionId, controller);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'حدث خطأ أثناء التواصل مع سيرفر السكري الذكي.');
-      }
-
-      if (data.sessionId) {
-        setActiveSessionId(data.sessionId);
-      }
-
-      addChatMessage({
-        id: data.modelMessageId,
+      const modelMsg: ChatMessage = {
+        id: result.messageId,
         role: 'model',
-        content: data.content,
-      });
+        content: result.content,
+        timestamp: localTimestamp(),
+      };
+
+      setChatHistory([...sendHistory, modelMsg]);
+
     } catch (err: any) {
+      if (abortControllerRef.current !== controller) return;
       if (err.name === 'AbortError') {
-        console.log('Save and resubmit aborted by user.');
         setErrorMessage('تم إلغاء توليد الإجابة من قبلك.');
       } else {
-        console.error(err);
-        setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري. يرجى مراجعة الإعدادات ومفتاح API.');
+        setErrorMessage(err.message || 'فشل الاتصال بمساعد السكري.');
       }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
+        setIsTyping(false);
       }
-      setIsTyping(false);
     }
-  }, [setChatHistory, addChatMessage, setActiveSessionId, markMessagesDeleted]);
+  }, [findLastUserIndex, setChatHistory, submitChatRequest]);
 
-  const handleClearChat = useCallback(() => {
-    clearChatHistory();
-  }, [clearChatHistory]);
+  const handleClearChat = useCallback(async () => {
+    const currentState = useAppStore.getState();
+    const oldSessionId = currentState.activeSessionId;
+    const currentHistory = currentState.chatHistory;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    setIsTyping(false);
+    setErrorMessage(null);
+    setEditingMessageId(null);
+
+    const newSessionId = generateUUID();
+
+    if (oldSessionId && currentHistory.length > 0 && navigator.onLine) {
+      const token = currentState.session?.access_token;
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const base = apiBase ? (apiBase.endsWith('/') ? apiBase : apiBase + '/') : '/';
+
+      try {
+        await fetch(base + 'api/chat/clear', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId: oldSessionId, chatHistory: currentHistory }),
+        });
+      } catch (err) {
+        console.error('[ClearChat] Archive failed:', err);
+      }
+    }
+
+    setChatHistory([]);
+    setActiveSessionId(newSessionId);
+  }, [setChatHistory, setActiveSessionId]);
 
   return (
     <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
       
-      <ChatHeader onClearChat={handleClearChat} />
+      <ChatHeader onClearChat={handleClearChat} isTyping={isTyping} />
 
       {isOffline && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 py-2.5 px-4 text-center text-xs text-amber-300 flex items-center justify-center gap-2 font-bold animate-[fadeIn_0.2s_ease-out]" dir="rtl">
@@ -429,7 +454,7 @@ export const Chat: React.FC = () => {
       >
         
         {chatHistory.length === 0 && (
-          <ChatWelcome onQuickPrompt={handleQuickPrompt} errorMessage={errorMessage} />
+          <ChatWelcome onQuickPrompt={handleQuickPrompt} errorMessage={errorMessage} isTyping={isTyping} />
         )}
 
         {/* Message bubbles list */}
@@ -445,7 +470,7 @@ export const Chat: React.FC = () => {
                 onStartEdit={() => setEditingMessageId(msg.id)}
                 onCancelEdit={() => setEditingMessageId(null)}
                 onSaveEdit={handleSaveAndResubmit}
-                onRegenerate={handleRegenerateAndResubmit}
+                onRegenerate={handleRegenerate}
               />
             ))}
 
@@ -463,9 +488,16 @@ export const Chat: React.FC = () => {
             {errorMessage && chatHistory.length > 0 && (
               <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-2xl flex items-start gap-3.5 max-w-[90%] mx-auto text-right">
                 <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-                <div className="flex-1 space-y-1 leading-none">
+                <div className="flex-1 space-y-1.5 leading-none">
                   <h4 className="text-[11px] font-bold text-rose-400 leading-none">تنبيه المساعد</h4>
                   <p className="text-[9px] text-rose-300 leading-relaxed font-semibold">{errorMessage}</p>
+                  <button
+                    onClick={handleRetry}
+                    disabled={isTyping}
+                    className="text-[10px] font-bold text-sky-400 hover:text-sky-300 disabled:opacity-40 transition-colors leading-none"
+                  >
+                    إعادة المحاولة
+                  </button>
                 </div>
               </div>
             )}

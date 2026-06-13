@@ -111,7 +111,12 @@ export const ChatMessageBubble = React.memo(({
       )}
 
       <span className="text-[8px] text-slate-600 mt-1 font-sans select-none px-1">
-        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('ar-SY', { hour: '2-digit', minute: '2-digit' }) : ''}
+        {(() => {
+          if (!msg.timestamp) return '';
+          const d = new Date(msg.timestamp);
+          if (isNaN(d.getTime())) return '';
+          return d.toLocaleTimeString('ar-SY', { hour: '2-digit', minute: '2-digit' });
+        })()}
       </span>
     </div>
   );

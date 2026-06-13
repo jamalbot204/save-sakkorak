@@ -10,9 +10,10 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
 import dotenv from "dotenv";
 import { KeyPoolManager } from "./keyPool";
-import { reverseArabicForConsole } from "./consoleUtils";
+import { localTimestamp, localToday } from "./datetimeUtils";
 
 dotenv.config();
 
@@ -77,7 +78,7 @@ app.get("/api/status", (req, res) => {
     return res.json({
       status: "online",
       project: "Sokkarak Mazboot",
-      time: new Date().toISOString(),
+      time: localTimestamp(),
       keyPoolStats: stats
     });
   } catch (error: any) {
@@ -85,16 +86,19 @@ app.get("/api/status", (req, res) => {
   }
 });
 
-// Gemini AI Chat Proxy Endpoint with local verification & fallback
+// Gemini AI Chat Proxy — client sends full chatHistory, server injects context + calls Gemini
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, sessionId, attachment, action = 'new', userMessageId, deleteMessageIds } = req.body;
+    const { sessionId, chatHistory, profile, healthData } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: "Message content is required" });
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session ID is required" });
     }
 
-    // Authenticate user via Supabase JWT
+    if (!chatHistory || !Array.isArray(chatHistory) || chatHistory.length === 0) {
+      return res.status(400).json({ error: "Chat history is required" });
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "No bearer token found" });
@@ -103,55 +107,26 @@ app.post("/api/chat", async (req, res) => {
     const token = authHeader.split(" ")[1];
     let userId: string | null = null;
 
-    // 1. Local verify fallback logic (Attempt to decode and optionally verify sign)
-    try {
-      const decoded: any = jwt.decode(token);
-      if (decoded && decoded.sub) {
-        userId = decoded.sub;
-      }
-    } catch (e) {
-      console.warn("[Auth] Failed to decode JWT locally:", e);
-    }
-
-    // 2. Direct network validation to guarantee user authenticity (Fallback option)
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (user && !authError) {
-        userId = user.id;
-      }
-    } catch (err) {
-      console.error("[Auth] Supabase direct verify failed:", err);
-    }
+    try { const decoded: any = jwt.decode(token); if (decoded?.sub) userId = decoded.sub; } catch {}
+    try { const { data: { user } } = await supabase.auth.getUser(token); if (user) userId = user.id; } catch {}
 
     if (!userId) {
       return res.status(401).json({ error: "تاريخ هويتك غير صالح أو منتهي الصلاحية. يرجى تسجيل الدخول مجددًا." });
     }
 
-    // Read profile details to enforce 100 messages/day limit
-    const todayStr = new Date().toISOString().split("T")[0];
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (profileError && profileError.code !== "PGRST116") {
-      console.error("[Database] Error loading user profile:", profileError);
-    }
+    const todayStr = localToday();
+    const { data: rateProfile, error: rateErr } = await supabase
+      .from("profiles").select("daily_chat_count,last_chat_date").eq("id", userId).single();
 
     let dailyChatCount = 0;
     let lastChatDate = todayStr;
-
-    if (profile) {
-      dailyChatCount = profile.daily_chat_count || 0;
-      lastChatDate = profile.last_chat_date || todayStr;
+    if (rateErr) {
+      console.error("[Chat] Rate-limit fetch failed (fail-open):", rateErr);
+    } else if (rateProfile) {
+      dailyChatCount = rateProfile.daily_chat_count || 0;
+      lastChatDate = rateProfile.last_chat_date || todayStr;
     }
-
-    // If day changed, reset daily chat count
-    if (lastChatDate !== todayStr) {
-      dailyChatCount = 0;
-      lastChatDate = todayStr;
-    }
+    if (lastChatDate !== todayStr) { dailyChatCount = 0; lastChatDate = todayStr; }
 
     if (dailyChatCount >= 100) {
       return res.status(429).json({
@@ -159,66 +134,52 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    // Fetch user medical profile details (medical stats and current meds) to inject in prompt
-    const { data: medications } = await supabase
-      .from("medications")
-      .select("*")
-      .eq("user_id", userId);
+    // Build patient context snippet from client-provided profile and health data
+    const p = profile || {};
+    const hd = healthData || {};
+    const medsFromHealth = (hd.medications || []) as any[];
+    const allReadings = (hd.glucoseReadings || []) as any[];
 
-    const { data: readings } = await supabase
-      .from("glucose_readings")
-      .select("*")
-      .eq("user_id", userId)
-      .order("logged_at", { ascending: false })
-      .limit(5);
-
-    // Build user profile snippet
     let patientContextSnippet = `Patient Profile:
-- Age: ${profile?.age || "Not specified"}
-- Gender: ${profile?.gender || "Not specified"}
-- Diabetes Type: ${profile?.diabetes_type || "Type 2 (default)"}
-- Comorbidities: ${profile?.comorbidities ? profile?.comorbidities.join(", ") : "None"}`;
+- Age: ${p.age || "Not specified"}
+- Gender: ${p.gender || "Not specified"}
+- Diabetes Type: ${p.diabetesType || "Type 2 (default)"}
+- Comorbidities: ${p.comorbidities ? p.comorbidities.join(", ") : "None"}`;
 
-    if (medications && medications.length > 0) {
-      const medList = medications.map(m => `- ${m.name} (dosage: ${m.dosage}, frequency: ${m.frequency}, time slots: ${m.time_slots.join(",")})`).join("\n");
+    if (medsFromHealth.length > 0) {
+      const medList = medsFromHealth.map((m: any) => `- ${m.name} (dosage: ${m.dosage}, frequency: ${m.frequency}, time slots: ${(m.timeSlots || []).join(",")})`).join("\n");
       patientContextSnippet += `\nMedications:\n${medList}`;
     } else {
       patientContextSnippet += `\nMedications: No active medical therapies are logged in the app yet.`;
     }
 
-    if (readings && readings.length > 0) {
-      const readingsList = readings.map(r => `- Value: ${r.value} mg/dL (${r.meal_relation}, Status: ${r.status}, time: ${r.logged_at})`).join("\n");
+    if (allReadings.length > 0) {
+      const latestReadings = allReadings.sort((a: any, b: any) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime()).slice(0, 5);
+      const readingsList = latestReadings.map((r: any) => `- Value: ${r.value} mg/dL (${r.mealRelation}, Status: ${r.status}, time: ${r.loggedAt})`).join("\n");
       patientContextSnippet += `\nRecent Blood Sugar Readings:\n${readingsList}`;
     }
 
-    // Fetch message history for the active session
-    const query = supabase
-      .from("chat_messages")
-      .select("*")
-      .eq("user_id", userId)
-      .is("is_deleted", null);
-    
-    if (sessionId) {
-      query.eq("session_id", sessionId);
-    }
-    
-    let { data: dbMessages } = await query
-      .order("timestamp", { ascending: true })
-      .limit(30);
-
-    // Soft-delete specified messages on regenerate/edit actions
-    if (deleteMessageIds && deleteMessageIds.length > 0) {
-      const now = new Date().toISOString();
-      await supabase
-        .from("chat_messages")
-        .update({ is_deleted: true, updated_at: now })
-        .in("id", deleteMessageIds);
-
-      const deleteSet = new Set(deleteMessageIds);
-      dbMessages = (dbMessages || []).filter((msg: any) => !deleteSet.has(msg.id));
+    // Transform client chatHistory into Gemini contents format
+    const contents: any[] = [];
+    for (const msg of chatHistory) {
+      const parts: any[] = [{ text: msg.content }];
+      if (msg.attachment && msg.attachment.dataUrl) {
+        const rawBase64 = msg.attachment.dataUrl.split(",")[1] || msg.attachment.dataUrl;
+        parts.unshift({
+          inlineData: {
+            mimeType: msg.attachment.mimeType || "image/png",
+            data: rawBase64,
+          },
+        });
+      }
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: parts,
+      });
     }
 
-    // Get Active Gemini Key from rotating key pool
+    const assembledSystemInstructions = `${SYRIAN_DIABETES_SYSTEM_INSTRUCTION}\n\n=== RECIPIENT INFORMATION (DO NOT OUTPUT THESE DETAILS DIRECTLY UNLESS RELEVANT) ===\n${patientContextSnippet}`;
+
     const activeApiKey = KeyPoolManager.getActiveKey();
     const ai = new GoogleGenAI({
       apiKey: activeApiKey,
@@ -229,53 +190,9 @@ app.post("/api/chat", async (req, res) => {
       },
     });
 
-    // Translate database messages format into Gemini contents format
-    const contents: any[] = [];
-    if (dbMessages && dbMessages.length > 0) {
-      dbMessages.forEach((msg) => {
-        const parts: any[] = [{ text: msg.content }];
-        if (msg.attachment_data_url) {
-          const rawBase64 = msg.attachment_data_url.split(",")[1] || msg.attachment_data_url;
-          parts.unshift({
-            inlineData: {
-              mimeType: msg.attachment_mime_type || "image/png",
-              data: rawBase64,
-            },
-          });
-        }
-        contents.push({
-          role: msg.role === "user" ? "user" : "model",
-          parts: parts,
-        });
-      });
-    }
-
-    // Add current turn message with attachments
-    const currentParts: any[] = [{ text: message }];
-    if (attachment && attachment.dataUrl) {
-      const rawBase64 = attachment.dataUrl.split(",")[1] || attachment.dataUrl;
-      currentParts.unshift({
-        inlineData: {
-          mimeType: attachment.mimeType || "image/png",
-          data: rawBase64,
-        },
-      });
-    }
-
-    contents.push({
-      role: "user",
-      parts: currentParts,
-    });
-
-    // Assemble rich Syrian guidelines combined with target patient context
-    const assembledSystemInstructions = `${SYRIAN_DIABETES_SYSTEM_INSTRUCTION}\n\n=== RECIPIENT INFORMATION (DO NOT OUT PUT THESE DETAILS DIRECTLY UNLESS RELEVANT) ===\n${patientContextSnippet}`;
-
-    console.log("=== SYSTEM INSTRUCTIONS SENT TO AI ===");
-    console.log(reverseArabicForConsole(assembledSystemInstructions));
-    console.log("=== CHAT CONTENTS SENT TO AI ===");
-    console.log(reverseArabicForConsole(JSON.stringify(contents, null, 2)));
-
     let replyText = "";
+    const gemAbort = new AbortController();
+    const gemTimeout = setTimeout(() => gemAbort.abort(), 70_000);
     try {
       const geminiResponse = await ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
@@ -287,83 +204,82 @@ app.post("/api/chat", async (req, res) => {
           thinkingConfig: {
             thinkingLevel: ThinkingLevel.HIGH,
           },
+          abortSignal: gemAbort.signal,
         },
       });
 
       KeyPoolManager.markSuccess(activeApiKey);
       replyText = geminiResponse.text || "عذرًا، لم أستطع فهم معطيات الحالة. يرجى المحاولة بشكل أوضح.";
     } catch (gemError: any) {
+      if (gemAbort.signal.aborted) {
+        console.error("[Gemini] Request timed out after 70 seconds.");
+        throw new Error("استغرق مساعد السكري وقتاً طويلاً جداً. يرجى المحاولة مرة أخرى.");
+      }
       KeyPoolManager.markFailure(activeApiKey, gemError.status || 500, gemError.message);
       console.error("[Gemini API Error]:", gemError);
       throw gemError;
+    } finally {
+      clearTimeout(gemTimeout);
     }
 
-    // Increment and update chat metadata in the database for rate-limiting
-    const nextChatCount = dailyChatCount + 1;
-    await supabase.from("profiles").upsert({
-      id: userId,
-      daily_chat_count: nextChatCount,
-      last_chat_date: todayStr,
-      updated_at: new Date().toISOString()
-    });
+    const now = localTimestamp();
+    const modelMsgId = randomUUID();
 
-    // Write chat turn to the database
-    // Ensure we have a valid session id
-    let activeSessionId = sessionId;
-    if (!activeSessionId) {
-      const { data: newSession, error: sessionError } = await supabase
-        .from("chat_sessions")
-        .insert({ user_id: userId, status: "active" })
-        .select()
-        .single();
-      if (sessionError) {
-        console.error("[Chat] Failed to create chat session:", sessionError);
-        return res.status(500).json({
-          error: "فشل إنشاء جلسة المحادثة. يرجى المحاولة مرة أخرى."
+    const modelMsg = {
+      id: modelMsgId,
+      role: "model",
+      content: replyText,
+      timestamp: now,
+    };
+
+    const fullChatHistory = [...chatHistory, modelMsg];
+
+    // Upsert session with full chat_history JSONB — creates on first use, overwrites on subsequent
+    // Retry once on failure; next message turn self-heals Supabase via full overwrite
+    let syncFailed = false;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { error } = await supabase.from("chat_sessions").upsert({
+          id: sessionId,
+          user_id: userId,
+          status: "active",
+          chat_history: fullChatHistory,
+          updated_at: now,
         });
+        if (!error) { syncFailed = false; break; }
+        syncFailed = true;
+        console.error(`[Chat] Session upsert attempt ${attempt + 1} failed:`, error);
+      } catch (err) {
+        syncFailed = true;
+        console.error(`[Chat] Session upsert attempt ${attempt + 1} error:`, err);
       }
-      if (newSession) {
-        activeSessionId = newSession.id;
-      }
+      if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
     }
 
-    let modelMessageId: string | null = null;
-
-    if (activeSessionId) {
-      const now = new Date().toISOString();
-
-      // Log user message
-      await supabase.from("chat_messages").upsert({
-        ...(userMessageId ? { id: userMessageId } : {}),
-        session_id: activeSessionId,
-        user_id: userId,
-        role: "user",
-        content: message,
-        attachment_name: attachment?.name || null,
-        attachment_mime_type: attachment?.mimeType || null,
-        attachment_data_url: attachment?.dataUrl || null,
-        timestamp: now,
-        updated_at: now
-      });
-
-      // Log model reply
-      const { data: modelInsert } = await supabase.from("chat_messages").insert({
-        session_id: activeSessionId,
-        user_id: userId,
-        role: "model",
-        content: replyText,
-        timestamp: now,
-        updated_at: now
-      }).select("id").single();
-
-      modelMessageId = modelInsert?.id || null;
+    // Increment rate-limit counter (same retry pattern)
+    const nextChatCount = dailyChatCount + 1;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { error } = await supabase.from("profiles").upsert({
+          id: userId,
+          daily_chat_count: nextChatCount,
+          last_chat_date: todayStr,
+          updated_at: now,
+        });
+        if (!error) break;
+        console.error(`[Chat] Rate-limit upsert attempt ${attempt + 1} failed:`, error);
+      } catch (err) {
+        console.error(`[Chat] Rate-limit upsert attempt ${attempt + 1} error:`, err);
+      }
+      if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
     }
 
     return res.json({
-      role: "model",
       content: replyText,
-      sessionId: activeSessionId,
-      modelMessageId
+      messageId: modelMsgId,
+      sessionId: sessionId,
+      syncFailed,
     });
 
   } catch (error: any) {
@@ -371,6 +287,41 @@ app.post("/api/chat", async (req, res) => {
     return res.status(500).json({
       error: error.message || "حدث خطأ فني أثناء المعالجة الطبية للطلب. يرجى التحقق وإعادة المحاولة."
     });
+  }
+});
+
+// Archive session (client handles new sessionId generation)
+app.post("/api/chat/clear", async (req, res) => {
+  try {
+    const { sessionId, chatHistory } = req.body;
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No bearer token found" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let userId: string | null = null;
+    try { const d: any = jwt.decode(token); userId = d?.sub; } catch {}
+    try { const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) userId = user.id; } catch {}
+    if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+    const now = localTimestamp();
+
+    await supabase.from("chat_sessions").upsert({
+      id: sessionId,
+      user_id: userId,
+      status: "archived",
+      chat_history: chatHistory || null,
+      archived_at: now,
+      updated_at: now,
+    });
+
+    return res.json({ sessionId });
+  } catch (e: any) {
+    console.error("[Chat Clear] Error:", e);
+    return res.status(500).json({ error: e.message });
   }
 });
 

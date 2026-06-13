@@ -4,9 +4,10 @@ import { Sparkles, AlertCircle } from 'lucide-react';
 interface ChatWelcomeProps {
   onQuickPrompt: (prompt: string) => void;
   errorMessage: string | null;
+  isTyping?: boolean;
 }
 
-export const ChatWelcome = React.memo(({ onQuickPrompt, errorMessage }: ChatWelcomeProps) => {
+export const ChatWelcome = React.memo(({ onQuickPrompt, errorMessage, isTyping = false }: ChatWelcomeProps) => {
   const quickPrompts = [
     'شوربة العدس والبرغل بترفع السكري كتير؟',
     'شو أعمل إذا رحت مشوار ونزل السكري تحت 70؟',
@@ -34,7 +35,8 @@ export const ChatWelcome = React.memo(({ onQuickPrompt, errorMessage }: ChatWelc
             <button
               key={q}
               onClick={() => onQuickPrompt(q)}
-              className="w-full text-right text-[10px] text-slate-300 bg-slate-900/40 hover:bg-slate-900/80 border border-slate-800/60 p-2.5 rounded-xl transition-all active:scale-[0.99]"
+              disabled={isTyping}
+              className="w-full text-right text-[10px] text-slate-300 bg-slate-900/40 hover:bg-slate-900/80 border border-slate-800/60 p-2.5 rounded-xl transition-all active:scale-[0.99] disabled:opacity-30 disabled:cursor-not-allowed"
             >
               💡 {q}
             </button>

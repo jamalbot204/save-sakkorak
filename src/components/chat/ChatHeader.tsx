@@ -3,9 +3,10 @@ import { Sparkles } from 'lucide-react';
 
 interface ChatHeaderProps {
   onClearChat: () => void;
+  isTyping?: boolean;
 }
 
-export const ChatHeader = React.memo(({ onClearChat }: ChatHeaderProps) => {
+export const ChatHeader = React.memo(({ onClearChat, isTyping = false }: ChatHeaderProps) => {
   return (
     <div className="px-5 py-3.5 bg-slate-900/95 border-b border-slate-800/80 flex justify-between items-center select-none z-30 shrink-0">
       <div className="flex items-center gap-3">
@@ -20,7 +21,8 @@ export const ChatHeader = React.memo(({ onClearChat }: ChatHeaderProps) => {
 
       <button 
         onClick={onClearChat}
-        className="text-[9px] font-bold text-slate-400 hover:text-rose-400 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800/80 transition-all active:scale-95"
+        disabled={isTyping}
+        className="text-[9px] font-bold text-slate-400 hover:text-rose-400 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800/80 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
       >
         حذف المحادثة
       </button>

@@ -11,6 +11,7 @@ import { del } from 'idb-keyval';
 import { generateUUID } from '../../lib/uuid';
 import { localTimestamp } from '../../lib/datetime';
 import { isOnline, subscribeToNetwork } from '../../lib/networkStatus';
+import { withRetry } from '../../lib/retry';
 
 export interface SyncSlice {
   isInitialized: boolean;
@@ -100,46 +101,48 @@ export const createSyncSlice: StateCreator<
 
     set({ isSyncing: true, syncError: null });
 
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('انتهت مهلة المزامنة — ١٥ ثانية')), 15_000)
-    );
-
     try {
       const supabase = getSupabase();
       const uId = state.user.id;
       const syncTime = localTimestamp();
       const lastSync = state.lastSyncedAt;
 
-      await Promise.race([
-        (async () => {
-          if (state.userProfile && (state.userProfile.updatedAt || '') > lastSync) {
-            await supabase.from('profiles').upsert({
-              id: uId,
-              name: state.userProfile.name,
-              age: state.userProfile.age,
-              gender: state.userProfile.gender,
-              diabetes_type: state.userProfile.diabetesType,
-              comorbidities: state.userProfile.comorbidities,
-              medication_times: state.userProfile.medicationTimes,
-              current_device_id: state.deviceId,
-              updated_at: state.userProfile.updatedAt
-            });
-          }
+      await withRetry(async () => {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('انتهت مهلة المزامنة — ١٥ ثانية')), 15_000)
+        );
 
-          await supabase.from('health_data').upsert({
-            user_id: uId,
-            data: {
-              medications: state.healthData.medications || [],
-              glucoseReadings: state.healthData.glucoseReadings || [],
-              medicationLogs: state.healthData.medicationLogs || [],
-              foodLogs: state.healthData.foodLogs || [],
-              waterLogs: state.healthData.waterLogs || {},
-            },
-            updated_at: syncTime
-          });
-        })(),
-        timeout,
-      ]);
+        await Promise.race([
+          (async () => {
+            if (state.userProfile && (state.userProfile.updatedAt || '') > lastSync) {
+              await supabase.from('profiles').upsert({
+                id: uId,
+                name: state.userProfile.name,
+                age: state.userProfile.age,
+                gender: state.userProfile.gender,
+                diabetes_type: state.userProfile.diabetesType,
+                comorbidities: state.userProfile.comorbidities,
+                medication_times: state.userProfile.medicationTimes,
+                current_device_id: state.deviceId,
+                updated_at: state.userProfile.updatedAt
+              });
+            }
+
+            await supabase.from('health_data').upsert({
+              user_id: uId,
+              data: {
+                medications: state.healthData.medications || [],
+                glucoseReadings: state.healthData.glucoseReadings || [],
+                medicationLogs: state.healthData.medicationLogs || [],
+                foodLogs: state.healthData.foodLogs || [],
+                waterLogs: state.healthData.waterLogs || {},
+              },
+              updated_at: syncTime
+            });
+          })(),
+          timeout,
+        ]);
+      }, 3, 'syncWithSupabase');
 
       set({ lastSyncedAt: syncTime, lastSyncStatus: 'synced' });
 
@@ -164,72 +167,74 @@ export const createSyncSlice: StateCreator<
 
     set({ isSyncing: true, syncError: null });
 
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('انتهت مهلة المزامنة — ١٥ ثانية')), 15_000)
-    );
-
     try {
       const supabase = getSupabase();
       const uId = state.user.id;
       const lastSync = state.lastSyncedAt;
       const syncTime = localTimestamp();
 
-      await Promise.race([
-        (async () => {
-          const { data: dbProfile } = await supabase.from('profiles').select('*').eq('id', uId).single();
-          
-          if (dbProfile) {
-            if (dbProfile.current_device_id && dbProfile.current_device_id !== state.deviceId) {
-              await supabase.from('profiles').upsert({
-                id: uId,
-                current_device_id: state.deviceId,
-                updated_at: syncTime,
-              });
-              await supabase.auth.signOut({ scope: 'others' });
+      await withRetry(async () => {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('انتهت مهلة المزامنة — ١٥ ثانية')), 15_000)
+        );
+
+        await Promise.race([
+          (async () => {
+            const { data: dbProfile } = await supabase.from('profiles').select('*').eq('id', uId).single();
+            
+            if (dbProfile) {
+              if (dbProfile.current_device_id && dbProfile.current_device_id !== state.deviceId) {
+                await supabase.from('profiles').upsert({
+                  id: uId,
+                  current_device_id: state.deviceId,
+                  updated_at: syncTime,
+                });
+                await supabase.auth.signOut({ scope: 'others' });
+              }
+
+              const serverUpdated = dbProfile.updated_at || '';
+              const localUpdated = state.userProfile?.updatedAt || '';
+              const isFreshSignIn = lastSync === new Date(0).toISOString();
+              
+              if (isFreshSignIn || serverUpdated > localUpdated) {
+                const mergedProfile: UserProfile = {
+                  name: dbProfile.name || '',
+                  age: dbProfile.age || 0,
+                  gender: dbProfile.gender || 'male',
+                  diabetesType: dbProfile.diabetes_type || 'type2',
+                  comorbidities: dbProfile.comorbidities || [],
+                  medicationTimes: dbProfile.medication_times || { Breakfast: '08:00 AM', Lunch: '01:00 PM', Dinner: '08:00 PM', Bedtime: '10:00 PM' },
+                  isOnboarded: !!dbProfile.age,
+                  currentDeviceId: state.deviceId,
+                  updatedAt: serverUpdated
+                };
+                set({ userProfile: mergedProfile });
+              }
             }
 
-            const serverUpdated = dbProfile.updated_at || '';
-            const localUpdated = state.userProfile?.updatedAt || '';
-            const isFreshSignIn = lastSync === new Date(0).toISOString();
-            
-            if (isFreshSignIn || serverUpdated > localUpdated) {
-              const mergedProfile: UserProfile = {
-                name: dbProfile.name || '',
-                age: dbProfile.age || 0,
-                gender: dbProfile.gender || 'male',
-                diabetesType: dbProfile.diabetes_type || 'type2',
-                comorbidities: dbProfile.comorbidities || [],
-                medicationTimes: dbProfile.medication_times || { Breakfast: '08:00 AM', Lunch: '01:00 PM', Dinner: '08:00 PM', Bedtime: '10:00 PM' },
-                isOnboarded: !!dbProfile.age,
-                currentDeviceId: state.deviceId,
-                updatedAt: serverUpdated
-              };
-              set({ userProfile: mergedProfile });
+            const { data: dbHealth } = await supabase.from('health_data').select('*').eq('user_id', uId).maybeSingle();
+            if (dbHealth && dbHealth.data) {
+              const remote = dbHealth.data;
+              const remoteUpdated = dbHealth.updated_at || '';
+              const isFreshSignIn = lastSync === new Date(0).toISOString();
+              
+              if (isFreshSignIn || remoteUpdated > state.healthDataUpdatedAt) {
+                set({
+                  healthData: {
+                    medications: remote.medications || [],
+                    glucoseReadings: remote.glucoseReadings || [],
+                    medicationLogs: remote.medicationLogs || [],
+                    foodLogs: remote.foodLogs || [],
+                    waterLogs: remote.waterLogs || {},
+                  },
+                  healthDataUpdatedAt: remoteUpdated
+                });
+              }
             }
-          }
-
-          const { data: dbHealth } = await supabase.from('health_data').select('*').eq('user_id', uId).maybeSingle();
-          if (dbHealth && dbHealth.data) {
-            const remote = dbHealth.data;
-            const remoteUpdated = dbHealth.updated_at || '';
-            const isFreshSignIn = lastSync === new Date(0).toISOString();
-            
-            if (isFreshSignIn || remoteUpdated > state.healthDataUpdatedAt) {
-              set({
-                healthData: {
-                  medications: remote.medications || [],
-                  glucoseReadings: remote.glucoseReadings || [],
-                  medicationLogs: remote.medicationLogs || [],
-                  foodLogs: remote.foodLogs || [],
-                  waterLogs: remote.waterLogs || {},
-                },
-                healthDataUpdatedAt: remoteUpdated
-              });
-            }
-          }
-        })(),
-        timeout,
-      ]);
+          })(),
+          timeout,
+        ]);
+      }, 3, 'pullFromSupabase');
 
       set({ lastSyncedAt: syncTime, profileReady: true, lastSyncStatus: 'synced' });
       console.log("[Sync] Delta Pull Completed Successfully.");

@@ -15,6 +15,33 @@ import { localTimestamp, localToday } from "./datetimeUtils";
 
 dotenv.config();
 
+/**
+ * Retry wrapper with exponential backoff.
+ * Retries the async function up to maxAttempts times with delays of 1s, 2s, 4s...
+ * On the final failure, throws the last captured error.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts: number = 3,
+  label: string = "operation"
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts - 1) {
+        const delay = 1000 * Math.pow(2, attempt);
+        console.warn(`[Retry] ${label} attempt ${attempt + 1}/${maxAttempts} failed, retrying in ${delay}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  console.error(`[Retry] ${label} exhausted all ${maxAttempts} attempts`);
+  throw lastError;
+}
+
 // Initialize Key Pool
 KeyPoolManager.initialize();
 
@@ -107,7 +134,10 @@ app.post("/api/chat", async (req, res) => {
     let userId: string | null = null;
 
     try { const decoded: any = jwt.decode(token); if (decoded?.sub) userId = decoded.sub; } catch {}
-    try { const { data: { user } } = await supabase.auth.getUser(token); if (user) userId = user.id; } catch {}
+    try {
+      const { data: { user } } = await withRetry(() => supabase.auth.getUser(token), 2, 'auth-getUser');
+      if (user) userId = user.id;
+    } catch {}
 
     if (!userId) {
       return res.status(401).json({ error: "تاريخ هويتك غير صالح أو منتهي الصلاحية. يرجى تسجيل الدخول مجددًا." });
@@ -179,22 +209,8 @@ app.post("/api/chat", async (req, res) => {
 
     const assembledSystemInstructions = `${SYRIAN_DIABETES_SYSTEM_INSTRUCTION}\n\n=== RECIPIENT INFORMATION (DO NOT OUTPUT THESE DETAILS DIRECTLY UNLESS RELEVANT) ===\n${patientContextSnippet}`;
 
-    const activeApiKey = KeyPoolManager.getActiveKey();
-    const ai = new GoogleGenAI({
-      apiKey: activeApiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-
-    let replyText = "";
-    const gemAbort = new AbortController();
-    const gemTimeout = setTimeout(() => gemAbort.abort(), 70_000);
     const gemStart = Date.now();
 
-    // Log Gemini request (base64 attachments replaced with size placeholder)
     console.log("\n── [Gemini] REQUEST ──");
     console.log(JSON.stringify({
       model: "gemini-3.1-flash-lite",
@@ -210,38 +226,47 @@ app.post("/api/chat", async (req, res) => {
     }, null, 2));
     console.log("──".padEnd(56, "─"));
 
-    try {
-      const geminiResponse = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: contents,
-        config: {
-          systemInstruction: assembledSystemInstructions,
-          temperature: 0.35,
-          topP: 0.3,
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.HIGH,
-          },
-          abortSignal: gemAbort.signal,
-        },
+    const replyText = await withRetry(async () => {
+      const activeApiKey = KeyPoolManager.getActiveKey();
+      const ai = new GoogleGenAI({
+        apiKey: activeApiKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build" } },
       });
 
-      KeyPoolManager.markSuccess(activeApiKey);
-      replyText = geminiResponse.text || "عذرًا، لم أستطع فهم معطيات الحالة. يرجى المحاولة بشكل أوضح.";
+      const gemAbort = new AbortController();
+      const gemTimeout = setTimeout(() => gemAbort.abort(), 70_000);
 
-      console.log(`── [Gemini] RESPONSE (${Date.now() - gemStart}ms) ──`);
-      console.log(replyText);
-      console.log("──".padEnd(56, "─"));
-    } catch (gemError: any) {
-      if (gemAbort.signal.aborted) {
-        console.error("[Gemini] Request timed out after 70 seconds.");
-        throw new Error("استغرق مساعد السكري وقتاً طويلاً جداً. يرجى المحاولة مرة أخرى.");
+      try {
+        const geminiResponse = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: contents,
+          config: {
+            systemInstruction: assembledSystemInstructions,
+            temperature: 0.35,
+            topP: 0.3,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+            abortSignal: gemAbort.signal,
+          },
+        });
+
+        KeyPoolManager.markSuccess(activeApiKey);
+        const text = geminiResponse.text || "عذرًا، لم أستطع فهم معطيات الحالة. يرجى المحاولة بشكل أوضح.";
+
+        console.log(`── [Gemini] RESPONSE (${Date.now() - gemStart}ms) ──`);
+        console.log(text);
+        console.log("──".padEnd(56, "─"));
+        return text;
+      } catch (gemError: any) {
+        if (gemAbort.signal.aborted) {
+          throw new Error("استغرق مساعد السكري وقتاً طويلاً جداً. يرجى المحاولة مرة أخرى.");
+        }
+        KeyPoolManager.markFailure(activeApiKey, gemError.status || 500, gemError.message);
+        console.error("[Gemini API Error]:", gemError);
+        throw gemError;
+      } finally {
+        clearTimeout(gemTimeout);
       }
-      KeyPoolManager.markFailure(activeApiKey, gemError.status || 500, gemError.message);
-      console.error("[Gemini API Error]:", gemError);
-      throw gemError;
-    } finally {
-      clearTimeout(gemTimeout);
-    }
+    }, 3, 'Gemini');
 
     const now = localTimestamp();
     const modelMsgId = randomUUID();
@@ -255,12 +280,10 @@ app.post("/api/chat", async (req, res) => {
 
     const fullChatHistory = [...chatHistory, modelMsg];
 
-    // Upsert session with full chat_history JSONB — creates on first use, overwrites on subsequent
-    // Retry once on failure; next message turn self-heals Supabase via full overwrite
     let syncFailed = false;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
+    try {
+      await withRetry(async () => {
         const { error } = await supabase.from("chat_sessions").upsert({
           id: sessionId,
           user_id: userId,
@@ -268,32 +291,26 @@ app.post("/api/chat", async (req, res) => {
           chat_history: fullChatHistory,
           updated_at: now,
         });
-        if (!error) { syncFailed = false; break; }
-        syncFailed = true;
-        console.error(`[Chat] Session upsert attempt ${attempt + 1} failed:`, error);
-      } catch (err) {
-        syncFailed = true;
-        console.error(`[Chat] Session upsert attempt ${attempt + 1} error:`, err);
-      }
-      if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+        if (error) throw error;
+      }, 3, 'chat-sessions-upsert');
+    } catch (err) {
+      syncFailed = true;
+      console.error("[Chat] Session upsert exhausted retries:", err);
     }
 
-    // Increment rate-limit counter (same retry pattern)
     const nextChatCount = dailyChatCount + 1;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
+    try {
+      await withRetry(async () => {
         const { error } = await supabase.from("profiles").upsert({
           id: userId,
           daily_chat_count: nextChatCount,
           last_chat_date: todayStr,
           updated_at: now,
         });
-        if (!error) break;
-        console.error(`[Chat] Rate-limit upsert attempt ${attempt + 1} failed:`, error);
-      } catch (err) {
-        console.error(`[Chat] Rate-limit upsert attempt ${attempt + 1} error:`, err);
-      }
-      if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+        if (error) throw error;
+      }, 3, 'rate-limit-upsert');
+    } catch (err) {
+      console.error("[Chat] Rate-limit upsert exhausted retries:", err);
     }
 
     return res.json({
@@ -330,14 +347,17 @@ app.post("/api/chat/clear", async (req, res) => {
 
     const now = localTimestamp();
 
-    await supabase.from("chat_sessions").upsert({
-      id: sessionId,
-      user_id: userId,
-      status: "archived",
-      chat_history: chatHistory || null,
-      archived_at: now,
-      updated_at: now,
-    });
+    await withRetry(async () => {
+      const { error } = await supabase.from("chat_sessions").upsert({
+        id: sessionId,
+        user_id: userId,
+        status: "archived",
+        chat_history: chatHistory || null,
+        archived_at: now,
+        updated_at: now,
+      });
+      if (error) throw error;
+    }, 3, 'chat-clear-archive');
 
     return res.json({ sessionId });
   } catch (e: any) {

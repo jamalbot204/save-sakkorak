@@ -14,6 +14,7 @@ import { ChatWelcome } from './chat/ChatWelcome';
 import { ChatMessageBubble } from './chat/ChatMessageBubble';
 import { ChatInputArea } from './chat/ChatInputArea';
 import { isOnline, subscribeToNetwork } from '../lib/networkStatus';
+import { withRetry } from '../lib/retry';
 
 export const Chat: React.FC = () => {
   const chatHistory = useAppStore((state) => state.chatHistory);
@@ -419,16 +420,19 @@ export const Chat: React.FC = () => {
       const base = apiBase ? (apiBase.endsWith('/') ? apiBase : apiBase + '/') : '/';
 
       try {
-        await fetch(base + 'api/chat/clear', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ sessionId: oldSessionId, chatHistory: currentHistory }),
-        });
+        await withRetry(async () => {
+          const res = await fetch(base + 'api/chat/clear', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ sessionId: oldSessionId, chatHistory: currentHistory }),
+          });
+          if (!res.ok) throw new Error(`Archive returned ${res.status}`);
+        }, 3, 'chat-clear-archive');
       } catch (err) {
-        console.error('[ClearChat] Archive failed:', err);
+        console.error('[ClearChat] Archive failed after retries:', err);
       }
     }
 

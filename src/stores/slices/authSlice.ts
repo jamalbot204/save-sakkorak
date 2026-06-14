@@ -7,7 +7,6 @@ import { StateCreator } from 'zustand';
 import { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '../../lib/supabaseClient';
 import { AppStoreState } from '../useAppStore';
-import { localTimestamp } from '../../lib/datetime';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
@@ -20,7 +19,6 @@ export interface AuthSlice {
   verifyOtp: (email: string, code: string) => Promise<{ success: boolean; message: string }>;
   signInWithGoogle: () => Promise<{ success: boolean; message: string }>;
   signOut: () => Promise<void>;
-  bypassLogin: () => void;
 }
 
 export const createAuthSlice: StateCreator<
@@ -138,38 +136,5 @@ export const createAuthSlice: StateCreator<
       // استدعاء دالة مسح البيانات بالكامل من شريحة المزامنة عبر get() المشترك
       await get().clearAllData();
     }
-  },
-
-  bypassLogin: () => {
-    const mockUser = {
-      id: 'mock-user-id',
-      email: 'demo.user@example.com',
-      app_metadata: {},
-      user_metadata: { name: 'مستخدم تجريبي' },
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-    };
-    const mockSession: Session = {
-      access_token: 'mock-token',
-      refresh_token: 'mock-refresh',
-      expires_in: 1e15,
-      expires_at: 1e15,
-      token_type: 'bearer',
-      user: mockUser as User,
-    };
-    set({ 
-      session: mockSession, 
-      user: mockUser,
-      userProfile: {
-        isOnboarded: false,
-        name: 'مستخدم تجريبي',
-        age: 45,
-        gender: 'male',
-        diabetesType: 'type2',
-        comorbidities: [],
-        medicationTimes: { Breakfast: '08:00', Lunch: '14:00', Dinner: '20:00', Bedtime: '22:00' },
-        updatedAt: localTimestamp()
-      }
-    });
   },
 });

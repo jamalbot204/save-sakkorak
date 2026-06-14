@@ -6,14 +6,13 @@
 import { useState } from 'react';
 import { useAppStore } from '../stores/useAppStore';
 import { Button } from './common/Button';
-import { Activity, Mail, Sparkles, AlertCircle, CheckCircle, RefreshCw, KeyRound, ArrowRight, FlaskConical } from 'lucide-react';
+import { Activity, Mail, Sparkles, AlertCircle, CheckCircle, RefreshCw, KeyRound, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function AuthGateway() {
   const sendOtpCode = useAppStore((state) => state.sendOtpCode);
   const verifyOtp = useAppStore((state) => state.verifyOtp);
   const signInWithGoogle = useAppStore((state) => state.signInWithGoogle);
-  const bypassLogin = useAppStore((state) => state.bypassLogin);
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -254,18 +253,6 @@ export function AuthGateway() {
           </svg>
           المتابعة بحساب Google
         </Button>
-
-        {/* Developer Sandbox Bypass Trigger */}
-        <div className="pt-2 border-t border-slate-800/50 flex flex-col items-center space-y-2">
-          <button
-            type="button"
-            onClick={bypassLogin}
-            className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 border border-amber-500/20 text-amber-300 font-bold text-xs hover:border-amber-400/40 hover:from-amber-500/20 transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_2px_12px_rgba(245,158,11,0.05)]"
-          >
-            <FlaskConical className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-            المتابعة السريعة للتجربة والمراجعة (بدون تسجيل) 🧪
-          </button>
-        </div>
 
         <div className="text-center">
           <p className="text-[10px] text-slate-500 leading-relaxed">

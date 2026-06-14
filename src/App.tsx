@@ -22,6 +22,7 @@ export default function App() {
   const initializeStore = useAppStore((state) => state.initializeStore);
   const toggleMedicationLog = useAppStore((state) => state.toggleMedicationLog);
   const session = useAppStore((state) => state.session);
+  const profileReady = useAppStore((state) => state.profileReady);
 
   // States
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -163,6 +164,18 @@ export default function App() {
   // 1.5. Render Auth Gate if unauthenticated
   if (!session) {
     return <AuthGateway />;
+  }
+
+  // 1.6. Waiting for profile pull from Supabase before deciding onboarding vs dashboard
+  if (!profileReady) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 font-sans select-none overflow-hidden">
+        <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-bold font-sans uppercase tracking-widest">
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping mr-1"></span>
+          <span>جاري تحميل ملفك الطبي من السحابة...</span>
+        </div>
+      </div>
+    );
   }
 
   // 2. Render Onboarding Workflow if first launch

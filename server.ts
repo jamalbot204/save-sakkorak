@@ -19,7 +19,7 @@ dotenv.config();
 KeyPoolManager.initialize();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Enable CORS for mobile Capacitor origins, Hugging Face Space, and local development
 const corsOrigin = process.env.CORS_ORIGIN || "";

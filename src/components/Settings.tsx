@@ -5,10 +5,12 @@
 
 import React, { useState } from 'react';
 import { useAppStore } from '../stores/useAppStore';
-import { Trash2, ShieldAlert, RefreshCw, HardDrive, Smartphone, Share2, MapPin } from 'lucide-react';
+import { Trash2, ShieldAlert, RefreshCw, HardDrive, Smartphone, Share2, MapPin, LogOut } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const userProfile = useAppStore((state) => state.userProfile);
+  const user = useAppStore((state) => state.user);
+  const signOut = useAppStore((state) => state.signOut);
   const clearAllData = useAppStore((state) => state.clearAllData);
 
   // States
@@ -57,6 +59,31 @@ export const Settings: React.FC = () => {
       {/* Settings Screen Title header */}
       <div className="text-right border-b border-slate-800 pb-3 h-11 shrink-0 select-none">
         <h1 className="text-base font-bold text-slate-100 font-sans">إعدادات الملف والتطبيق</h1>
+      </div>
+
+      {/* ACCOUNT STATUS CARD */}
+      <div className="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-5 space-y-4 shrink-0">
+        <div className="flex justify-between items-center select-none">
+          <span className="text-xs font-bold text-slate-400">حالة الحساب السحابي</span>
+          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 px-2.5 py-1 rounded-full text-[9px] font-bold flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+            متصل
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          <div className="bg-slate-950/60 rounded-2xl p-3 text-right">
+            <span className="text-[9px] text-slate-500 block mb-0.5">الحساب المسجل</span>
+            <span className="text-sm text-slate-200 font-bold font-mono break-all" dir="ltr">{user?.email}</span>
+          </div>
+          <button
+            onClick={signOut}
+            className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            تسجيل الخروج
+          </button>
+        </div>
       </div>
 
       {/* USER PROFILE SUMMARY CARD */}

@@ -17,6 +17,7 @@ export interface SyncSlice {
   syncError: string | null;
   lastSyncedAt: string;
   healthDataUpdatedAt: string;
+  profileReady: boolean;
   initializeStore: () => void;
   syncWithSupabase: () => Promise<void>;
   pullFromSupabase: () => Promise<void>;
@@ -34,6 +35,7 @@ export const createSyncSlice: StateCreator<
   syncError: null,
   lastSyncedAt: new Date(0).toISOString(),
   healthDataUpdatedAt: new Date(0).toISOString(),
+  profileReady: false,
 
   initializeStore: () => {
     const supabase = getSupabase();
@@ -149,15 +151,19 @@ export const createSyncSlice: StateCreator<
       
       if (dbProfile) {
         if (dbProfile.current_device_id && dbProfile.current_device_id !== state.deviceId) {
-          alert("تم تسجيل الدخول من جهاز آخر. سيتم تسجيل الخروج لحماية بياناتك.");
-          await get().signOut();
-          return;
+          await supabase.from('profiles').upsert({
+            id: uId,
+            current_device_id: state.deviceId,
+            updated_at: syncTime,
+          });
+          await supabase.auth.signOut({ scope: 'others' });
         }
 
         const serverUpdated = dbProfile.updated_at || '';
         const localUpdated = state.userProfile?.updatedAt || '';
+        const isFreshSignIn = lastSync === new Date(0).toISOString();
         
-        if (serverUpdated > localUpdated) {
+        if (isFreshSignIn || serverUpdated > localUpdated) {
           const mergedProfile: UserProfile = {
             name: dbProfile.name || '',
             age: dbProfile.age || 0,
@@ -171,28 +177,17 @@ export const createSyncSlice: StateCreator<
           };
           set({ userProfile: mergedProfile });
         }
-      } else if (state.userProfile) {
-        // رفع الملف لأول مرة إذا لم يكن موجوداً في السحابة
-        await supabase.from('profiles').upsert({
-          id: uId,
-          name: state.userProfile.name,
-          age: state.userProfile.age,
-          gender: state.userProfile.gender,
-          diabetes_type: state.userProfile.diabetesType,
-          comorbidities: state.userProfile.comorbidities,
-          medication_times: state.userProfile.medicationTimes,
-          current_device_id: state.deviceId,
-          updated_at: state.userProfile.updatedAt || syncTime
-        });
       }
+        // New account: no server data — nothing to pull, onboarding will create the profile
 
       // 2. جلب بيانات الصحة كاملة كـ JSONB واحد
-      const { data: dbHealth } = await supabase.from('health_data').select('*').eq('user_id', uId).gt('updated_at', lastSync).maybeSingle();
+      const { data: dbHealth } = await supabase.from('health_data').select('*').eq('user_id', uId).maybeSingle();
       if (dbHealth && dbHealth.data) {
         const remote = dbHealth.data;
         const remoteUpdated = dbHealth.updated_at || '';
+        const isFreshSignIn = lastSync === new Date(0).toISOString();
         
-        if (remoteUpdated > state.healthDataUpdatedAt) {
+        if (isFreshSignIn || remoteUpdated > state.healthDataUpdatedAt) {
           set({
             healthData: {
               medications: remote.medications || [],
@@ -206,7 +201,7 @@ export const createSyncSlice: StateCreator<
         }
       }
 
-      set({ lastSyncedAt: syncTime });
+      set({ lastSyncedAt: syncTime, profileReady: true });
       console.log("[Sync] Delta Pull Completed Successfully.");
 
     } catch (err: any) {
@@ -227,7 +222,8 @@ export const createSyncSlice: StateCreator<
       isInitialized: false,
       deviceId: generateUUID(),
       lastSyncedAt: new Date(0).toISOString(),
-      healthDataUpdatedAt: new Date(0).toISOString()
+      healthDataUpdatedAt: new Date(0).toISOString(),
+      profileReady: false
     });
     
     localStorage.clear();

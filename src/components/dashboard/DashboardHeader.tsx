@@ -9,7 +9,7 @@ import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-
 interface DashboardHeaderProps {
   userName?: string;
   isSyncing: boolean;
-  syncError: string | null;
+  lastSyncStatus: 'idle' | 'synced' | 'failed';
   isOffline: boolean;
   onForceSync: () => Promise<void>;
 }
@@ -17,7 +17,7 @@ interface DashboardHeaderProps {
 export const DashboardHeader = React.memo(({
   userName,
   isSyncing,
-  syncError,
+  lastSyncStatus,
   isOffline,
   onForceSync
 }: DashboardHeaderProps) => {
@@ -28,13 +28,11 @@ export const DashboardHeader = React.memo(({
     onForceSync().catch((err) => console.error("[Header] Manual sync failed:", err));
   };
 
-  // رسم وتحديد حالة المؤشر التفاعلي بناءً على حالة الشبكة والمزامنة
   const renderSyncStatus = () => {
-    if (isOffline) {
+    if (isOffline && lastSyncStatus !== 'synced') {
       return (
         <div className="flex flex-col items-center justify-center transform-gpu">
           <div className="relative flex h-5 w-5 items-center justify-center">
-            {/* نبض أحمر دائري مسرع عبر الـ GPU */}
             <span className="animate-ping absolute inline-flex h-3.5 w-3.5 rounded-full bg-rose-500 opacity-75"></span>
             <CloudOff className="w-5 h-5 text-rose-400 relative z-10" strokeWidth={2} />
           </div>
@@ -46,28 +44,34 @@ export const DashboardHeader = React.memo(({
     if (isSyncing) {
       return (
         <div className="flex flex-col items-center justify-center transform-gpu">
-          {/* حلقة دوران زرقاء سريعة */}
           <RefreshCw className="w-5 h-5 text-sky-400 animate-spin" strokeWidth={2.5} />
           <span className="text-[8px] text-sky-400 font-black mt-1.5 leading-none">جاري المزامنة...</span>
         </div>
       );
     }
 
-    if (syncError) {
+    if (lastSyncStatus === 'failed') {
       return (
         <div className="flex flex-col items-center justify-center transform-gpu">
-          {/* مثلث تحذير برتقالي ينبض عمودياً */}
           <AlertTriangle className="w-5 h-5 text-amber-400 animate-bounce" strokeWidth={2} />
-          <span className="text-[8px] text-amber-400 font-black mt-1.5 leading-none">فشلت! اضغط للإعادة</span>
+          <span className="text-[8px] text-amber-400 font-black mt-1.5 leading-none">فشلت المزامنة</span>
         </div>
       );
     }
 
-    // الحالة الافتراضية: متصل ومزامن بنجاح
+    if (lastSyncStatus === 'synced') {
+      return (
+        <div className="flex flex-col items-center justify-center transform-gpu">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" strokeWidth={2} />
+          <span className="text-[8px] text-emerald-400 font-black mt-1.5 leading-none">مزامنة سحابية آمنة ✓</span>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col items-center justify-center transform-gpu">
-        <CheckCircle2 className="w-5 h-5 text-emerald-400" strokeWidth={2} />
-        <span className="text-[8px] text-emerald-400 font-black mt-1.5 leading-none">مزامنة سحابية آمنة ✓</span>
+        <Cloud className="w-5 h-5 text-slate-500" strokeWidth={2} />
+        <span className="text-[8px] text-slate-500 font-black mt-1.5 leading-none">لم تتم المزامنة بعد</span>
       </div>
     );
   };
@@ -82,13 +86,13 @@ export const DashboardHeader = React.memo(({
       {/* زر المؤشر التفاعلي */}
       <button
         onClick={handleSyncClick}
-        disabled={isOffline || isSyncing}
+        disabled={isSyncing}
         className={`p-2.5 min-w-[85px] bg-slate-950/80 rounded-2xl border border-slate-800 shadow-inner text-center transition-all duration-200 active:scale-95 ${
-          isOffline 
+          isSyncing
             ? 'cursor-not-allowed opacity-80' 
             : 'cursor-pointer hover:border-slate-700'
         }`}
-        title={isOffline ? "أنت غير متصل بالإنترنت حالياً" : "اضغط لإطلاق مزامنة فورية مع السحابة"}
+        title="اضغط لإطلاق مزامنة فورية مع السحابة"
       >
         {renderSyncStatus()}
       </button>

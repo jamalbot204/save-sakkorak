@@ -22,11 +22,9 @@ export const createProfileSlice: StateCreator<
   ProfileSlice
 > = (set, get) => {
   const triggerBackgroundSync = () => {
-    if (navigator.onLine) {
-      get().syncWithSupabase().catch((err) => {
-        console.error("[BackgroundSync] Error syncing:", err);
-      });
-    }
+    get().syncWithSupabase().catch((err) => {
+      console.error("[BackgroundSync] Error syncing:", err);
+    });
   };
 
   return {

@@ -13,26 +13,32 @@ import { ChatHeader } from './chat/ChatHeader';
 import { ChatWelcome } from './chat/ChatWelcome';
 import { ChatMessageBubble } from './chat/ChatMessageBubble';
 import { ChatInputArea } from './chat/ChatInputArea';
+import { isOnline, subscribeToNetwork } from '../lib/networkStatus';
 
 export const Chat: React.FC = () => {
   const chatHistory = useAppStore((state) => state.chatHistory);
   const setChatHistory = useAppStore((state) => state.setChatHistory);
   const setActiveSessionId = useAppStore((state) => state.setActiveSessionId);
 
-  // States
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState<boolean>(true);
 
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    let cancelled = false;
+
+    isOnline().then((online) => {
+      if (!cancelled) setIsOffline(!online);
+    });
+
+    const unsubscribe = subscribeToNetwork((online) => {
+      if (!cancelled) setIsOffline(!online);
+    });
+
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -407,7 +413,7 @@ export const Chat: React.FC = () => {
 
     const newSessionId = generateUUID();
 
-    if (oldSessionId && currentHistory.length > 0 && navigator.onLine) {
+    if (oldSessionId && currentHistory.length > 0) {
       const token = currentState.session?.access_token;
       const apiBase = import.meta.env.VITE_API_URL || '';
       const base = apiBase ? (apiBase.endsWith('/') ? apiBase : apiBase + '/') : '/';

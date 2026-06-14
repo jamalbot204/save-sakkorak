@@ -5,12 +5,11 @@
 
 import React, { useState } from 'react';
 import { useAppStore } from '../stores/useAppStore';
-import { Trash2, ShieldAlert, RefreshCw, HardDrive, Smartphone, Share2, MapPin, LogOut } from 'lucide-react';
+import { Trash2, ShieldAlert, RefreshCw, HardDrive, Smartphone, Share2, MapPin } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const userProfile = useAppStore((state) => state.userProfile);
   const user = useAppStore((state) => state.user);
-  const signOut = useAppStore((state) => state.signOut);
   const clearAllData = useAppStore((state) => state.clearAllData);
 
   // States
@@ -76,13 +75,38 @@ export const Settings: React.FC = () => {
             <span className="text-[9px] text-slate-500 block mb-0.5">الحساب المسجل</span>
             <span className="text-sm text-slate-200 font-bold font-mono break-all" dir="ltr">{user?.email}</span>
           </div>
-          <button
-            onClick={signOut}
-            className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            تسجيل الخروج
-          </button>
+          <div className="bg-rose-500/5 border border-rose-500/15 rounded-2xl p-3 space-y-3">
+            <h2 className="text-xs font-bold text-rose-400 select-none flex items-center">
+              <Trash2 className="w-4 h-4 text-rose-400 ml-1.5" />
+              إدارة الذاكرة والخصوصية
+            </h2>
+            
+            <p className="text-[10px] text-rose-300/80 leading-relaxed text-right select-none">
+              سيؤدي النقر على الزر أدناه إلى مسح كافة البيانات من الذاكرة المحلية لجهازك وحذف التاريخ الطبي وملفك الشخصي.
+            </p>
+
+            <button
+              onClick={triggerResetModal}
+              disabled={isResetting}
+              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                isResetting 
+                  ? 'bg-rose-500/5 border border-rose-500/10 text-rose-300/60 cursor-not-allowed select-none'
+                  : 'bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 active:scale-95'
+              }`}
+            >
+              {isResetting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-rose-400" />
+                  <span>جاري مسح الذاكرة وبدء التشغيل من الصفر...</span>
+                </>
+              ) : (
+                <>
+                  <HardDrive className="w-4 h-4" />
+                  <span>مسح كافة البيانات وإعادة التشغيل</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -172,40 +196,6 @@ export const Settings: React.FC = () => {
           </button>
 
         </div>
-      </div>
-
-      {/* RESET AND STORAGE REMOVAL CONTROLS */}
-      <div className="bg-rose-500/5 border border-rose-500/15 rounded-3xl p-5 space-y-4 shrink-0">
-        <h2 className="text-xs font-bold text-rose-400 select-none flex items-center">
-          <Trash2 className="w-4 h-4 text-rose-400 mr-1.5 ml-1.5" />
-          إدارة الذاكرة والخصوصية
-        </h2>
-        
-        <p className="text-[10px] text-rose-300/80 leading-relaxed text-right select-none">
-          سيؤدي النقر على الزر أدناه إلى مسح كافة البيانات من الذاكرة المحلية لجهازك وحذف التاريخ الطبي وملفك الشخصي.
-        </p>
-
-        <button
-          onClick={triggerResetModal}
-          disabled={isResetting}
-          className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            isResetting 
-              ? 'bg-rose-500/5 border border-rose-500/10 text-rose-300/60 cursor-not-allowed select-none'
-              : 'bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 active:scale-95'
-          }`}
-        >
-          {isResetting ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin text-rose-400" />
-              <span>جاري مسح الذاكرة وبدء التشغيل من الصفر...</span>
-            </>
-          ) : (
-            <>
-              <HardDrive className="w-4 h-4" />
-              <span>مسح كافة البيانات وإعادة التشغيل</span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* CUSTOM ELEGANT CONFIRMATION DIALOG (IFRAME SAFE) */}

@@ -15,14 +15,14 @@ import { AddMedicationModal } from './dashboard/AddMedicationModal';
 import { MedicationManagerModal } from './dashboard/MedicationManagerModal';
 import { ExtendedGlucoseModal } from './dashboard/ExtendedGlucoseModal';
 import { Medication } from '../types';
+import { isOnline, subscribeToNetwork } from '../lib/networkStatus';
 
 export const Dashboard: React.FC = () => {
   const userProfile = useAppStore((state) => state.userProfile);
   const healthData = useAppStore((state) => state.healthData);
 
-  // جلب حالات المزامنة من Zustand Store
   const isSyncing = useAppStore((state) => state.isSyncing);
-  const syncError = useAppStore((state) => state.syncError);
+  const lastSyncStatus = useAppStore((state) => state.lastSyncStatus);
   const syncWithSupabase = useAppStore((state) => state.syncWithSupabase);
 
   const addGlucoseReading = useAppStore((state) => state.addGlucoseReading);
@@ -37,24 +37,26 @@ export const Dashboard: React.FC = () => {
   const [showMedicationManager, setShowMedicationManager] = useState<boolean>(false);
   const [showDetailedModal, setShowDetailedModal] = useState<boolean>(false);
   
-  // حالة الاتصال بالإنترنت المحلية
-  const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState<boolean>(true);
 
-  // الاستماع لحالة الشبكة لتحديث المؤشر فوراً
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOffline(false);
-      // إطلاق مزامنة تلقائية فور عودة الاتصال
-      syncWithSupabase().catch((err) => console.error("[Sync] Auto sync on reconnect failed:", err));
-    };
-    const handleOffline = () => setIsOffline(true);
+    let cancelled = false;
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    isOnline().then((online) => {
+      if (!cancelled) setIsOffline(!online);
+    });
+
+    const unsubscribe = subscribeToNetwork((online) => {
+      if (cancelled) return;
+      setIsOffline(!online);
+      if (online) {
+        syncWithSupabase().catch((err) => console.error("[Dashboard] Auto sync on reconnect failed:", err));
+      }
+    });
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      cancelled = true;
+      unsubscribe();
     };
   }, [syncWithSupabase]);
 
@@ -139,7 +141,7 @@ export const Dashboard: React.FC = () => {
       <DashboardHeader 
         userName={userProfile?.name} 
         isSyncing={isSyncing}
-        syncError={syncError}
+        lastSyncStatus={lastSyncStatus}
         isOffline={isOffline}
         onForceSync={syncWithSupabase}
       />

@@ -14,7 +14,6 @@ import { ChatWelcome } from './chat/ChatWelcome';
 import { ChatMessageBubble } from './chat/ChatMessageBubble';
 import { ChatInputArea } from './chat/ChatInputArea';
 import { isOnline, subscribeToNetwork } from '../lib/networkStatus';
-import { withRetry } from '../lib/retry';
 
 export const Chat: React.FC = () => {
   const chatHistory = useAppStore((state) => state.chatHistory);
@@ -25,6 +24,7 @@ export const Chat: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState<boolean>(true);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -398,7 +398,7 @@ export const Chat: React.FC = () => {
     }
   }, [findLastUserIndex, setChatHistory, submitChatRequest]);
 
-  const handleClearChat = useCallback(async () => {
+  const handleClearChat = useCallback(() => {
     const currentState = useAppStore.getState();
     const oldSessionId = currentState.activeSessionId;
     const currentHistory = currentState.chatHistory;
@@ -414,36 +414,36 @@ export const Chat: React.FC = () => {
 
     const newSessionId = generateUUID();
 
+    setChatHistory([]);
+    setActiveSessionId(newSessionId);
+
     if (oldSessionId && currentHistory.length > 0) {
       const token = currentState.session?.access_token;
       const apiBase = import.meta.env.VITE_API_URL || '';
       const base = apiBase ? (apiBase.endsWith('/') ? apiBase : apiBase + '/') : '/';
 
-      try {
-        await withRetry(async () => {
-          const res = await fetch(base + 'api/chat/clear', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ sessionId: oldSessionId, chatHistory: currentHistory }),
-          });
-          if (!res.ok) throw new Error(`Archive returned ${res.status}`);
-        }, 3, 'chat-clear-archive');
-      } catch (err) {
-        console.error('[ClearChat] Archive failed after retries:', err);
-      }
-    }
+      setIsClearing(true);
 
-    setChatHistory([]);
-    setActiveSessionId(newSessionId);
+      fetch(base + 'api/chat/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ sessionId: oldSessionId }),
+      })
+        .then(() => setIsClearing(false))
+        .catch((err) => {
+          console.error('[ClearChat] Archive failed:', err);
+          setIsClearing(false);
+        });
+    }
   }, [setChatHistory, setActiveSessionId]);
 
   return (
     <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
       
-      <ChatHeader onClearChat={handleClearChat} isTyping={isTyping} />
+      <ChatHeader onClearChat={handleClearChat} isTyping={isTyping} isClearing={isClearing} />
 
       {isOffline && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 py-2.5 px-4 text-center text-xs text-amber-300 flex items-center justify-center gap-2 font-bold animate-[fadeIn_0.2s_ease-out]" dir="rtl">

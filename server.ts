@@ -4,9 +4,7 @@
  */
 
 import express from "express";
-import path from "path";
 import cors from "cors";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
@@ -21,20 +19,21 @@ dotenv.config();
 KeyPoolManager.initialize();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Enable CORS for mobile Capacitor origins and local development
+// Enable CORS for mobile Capacitor origins, Hugging Face Space, and local development
+const corsOrigin = process.env.CORS_ORIGIN || "";
+const staticOrigins = [
+  "capacitor://localhost",
+  "http://localhost",
+  "https://localhost",
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:1234",
+  "https://testbeta1-sokkarak-mazboot.hf.space",
+];
 app.use(cors({
-  origin: [
-    "capacitor://localhost",
-    "http://localhost",
-    "https://localhost",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:1234",
-    "https://ais-dev-hz5bbfhxhm2dfoyjnguqya-26768304059.europe-west2.run.app",
-    "https://ais-pre-hz5bbfhxhm2dfoyjnguqya-26768304059.europe-west2.run.app"
-  ],
+  origin: corsOrigin === "*" ? true : [...staticOrigins, corsOrigin].filter(Boolean),
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
@@ -193,6 +192,24 @@ app.post("/api/chat", async (req, res) => {
     let replyText = "";
     const gemAbort = new AbortController();
     const gemTimeout = setTimeout(() => gemAbort.abort(), 70_000);
+    const gemStart = Date.now();
+
+    // Log Gemini request (base64 attachments replaced with size placeholder)
+    console.log("\n── [Gemini] REQUEST ──");
+    console.log(JSON.stringify({
+      model: "gemini-3.1-flash-lite",
+      systemInstruction: assembledSystemInstructions,
+      contents: contents.map((c: any) => ({
+        role: c.role,
+        parts: c.parts.map((p: any) => {
+          if (p.inlineData) return { inlineData: { mimeType: p.inlineData.mimeType, data: `[BASE64 ${p.inlineData.data.length} chars]` } };
+          return p;
+        }),
+      })),
+      config: { temperature: 0.35, topP: 0.3, thinkingLevel: "HIGH" },
+    }, null, 2));
+    console.log("──".padEnd(56, "─"));
+
     try {
       const geminiResponse = await ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
@@ -210,6 +227,10 @@ app.post("/api/chat", async (req, res) => {
 
       KeyPoolManager.markSuccess(activeApiKey);
       replyText = geminiResponse.text || "عذرًا، لم أستطع فهم معطيات الحالة. يرجى المحاولة بشكل أوضح.";
+
+      console.log(`── [Gemini] RESPONSE (${Date.now() - gemStart}ms) ──`);
+      console.log(replyText);
+      console.log("──".padEnd(56, "─"));
     } catch (gemError: any) {
       if (gemAbort.signal.aborted) {
         console.error("[Gemini] Request timed out after 70 seconds.");
@@ -325,25 +346,7 @@ app.post("/api/chat/clear", async (req, res) => {
   }
 });
 
-// Setup Express routing with Vite Middleware in Development
-async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Sokkarak Mazboot] Full-stack Server listening on port ${PORT}`);
-  });
-}
-
-startServer();
+// API-only server (Hugging Face Spaces deployment)
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`[Sokkarak Mazboot] API Server listening on port ${PORT}`);
+});

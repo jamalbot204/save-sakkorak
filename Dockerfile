@@ -8,7 +8,7 @@ RUN npm install --legacy-peer-deps
 COPY tsconfig.json vite.config.ts ./
 COPY index.html ./
 COPY src/ src/
-COPY server.ts keyPool.ts datetimeUtils.ts consoleUtils.ts ./
+COPY server.ts keyPool.ts datetimeUtils.ts consoleUtils.ts protocols.txt ./
 
 RUN npm run build
 

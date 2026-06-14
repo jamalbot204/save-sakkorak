@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useAppStore } from '../stores/useAppStore';
 import { Button } from './common/Button';
 import { Activity, Mail, Sparkles, AlertCircle, CheckCircle, RefreshCw, KeyRound, ArrowRight } from 'lucide-react';
@@ -21,7 +21,7 @@ export function AuthGateway() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
+  const handleSendOtp = async (e: FormEvent) => {
     e.preventDefault();
     if (!email.trim()) {
       setError('يرجى كتابة البريد الإلكتروني الخاص بك أولاً.');
@@ -43,7 +43,7 @@ export function AuthGateway() {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: FormEvent) => {
     e.preventDefault();
     if (!code.trim()) {
       setError('يرجى إدخال كود التحقق المكون من 6 أرقام.');

@@ -54,6 +54,7 @@ export interface ChatMessage extends SyncableRecord {
   sessionId?: string;
   role: 'user' | 'model';
   content: string;
+  thought?: string;
   timestamp: string;
   attachment?: {
     name: string;

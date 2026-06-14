@@ -135,7 +135,7 @@ export const Chat: React.FC = () => {
     chatHistory: ChatMessage[],
     sessionId: string,
     controller: AbortController
-  ): Promise<{ content: string; messageId: string; sessionId: string }> => {
+  ): Promise<{ content: string; thought?: string; messageId: string; sessionId: string }> => {
     const state = useAppStore.getState();
     const session = state.session;
     const apiBase = import.meta.env.VITE_API_URL || '';
@@ -151,6 +151,7 @@ export const Chat: React.FC = () => {
         sessionId,
         chatHistory,
         profile: state.userProfile ? {
+          name: state.userProfile.name,
           age: state.userProfile.age,
           gender: state.userProfile.gender,
           diabetesType: state.userProfile.diabetesType,
@@ -218,6 +219,7 @@ export const Chat: React.FC = () => {
         id: result.messageId,
         role: 'model',
         content: result.content,
+        thought: result.thought,
         timestamp: localTimestamp(),
       };
 
@@ -265,12 +267,13 @@ export const Chat: React.FC = () => {
 
     submitChatRequest(currentHist, sessionId, controller)
       .then((result) => {
-        const modelMsg: ChatMessage = {
-          id: result.messageId,
-          role: 'model',
-          content: result.content,
-          timestamp: localTimestamp(),
-        };
+      const modelMsg: ChatMessage = {
+        id: result.messageId,
+        role: 'model',
+        content: result.content,
+        thought: result.thought,
+        timestamp: localTimestamp(),
+      };
         setChatHistory([...currentHist, modelMsg]);
       })
       .catch((err: any) => {
@@ -327,6 +330,7 @@ export const Chat: React.FC = () => {
         id: result.messageId,
         role: 'model',
         content: result.content,
+        thought: result.thought,
         timestamp: localTimestamp(),
       };
 
@@ -378,6 +382,7 @@ export const Chat: React.FC = () => {
         id: result.messageId,
         role: 'model',
         content: result.content,
+        thought: result.thought,
         timestamp: localTimestamp(),
       };
 

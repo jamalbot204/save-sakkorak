@@ -16,7 +16,7 @@ export const ChatHeader = React.memo(({ onClearChat, isTyping = false, isClearin
         </div>
         <div>
           <h1 className="text-xs font-bold text-slate-100 Shami">مساعد السكري الذكي "مظبوط"</h1>
-          <p className="text-[9px] text-sky-400 mt-0.5 leading-none">مدعوم بـ نموذج Gemini 3.5 Flash</p>
+          <p className="text-[9px] text-sky-400 mt-0.5 leading-none">هاد مجرد نموذج ذكاء إصطاعي قد يخطأ من الأفضل دائما إستئارة طبيبك المختص</p>
         </div>
       </div>
 

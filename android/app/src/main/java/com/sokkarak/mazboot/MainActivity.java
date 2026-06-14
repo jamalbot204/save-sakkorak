@@ -4,12 +4,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
 import com.getcapacitor.BridgeActivity;
+import com.codetrixstudio.capacitor.GoogleAuth.GoogleAuth;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AndroidSettingsExPlugin.class);
         registerPlugin(MedicationAlarmPlugin.class);
+        registerPlugin(GoogleAuth.class);
         super.onCreate(savedInstanceState);
 
         // Full Screen Intent / Alarm Clock config: Wake up screen and show over Lock Screen

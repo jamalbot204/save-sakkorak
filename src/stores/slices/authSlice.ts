@@ -8,6 +8,8 @@ import { Session, User } from '@supabase/supabase-js';
 import { getSupabase } from '../../lib/supabaseClient';
 import { AppStoreState } from '../useAppStore';
 import { localTimestamp } from '../../lib/datetime';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 export interface AuthSlice {
   session: Session | null;
@@ -92,6 +94,20 @@ export const createAuthSlice: StateCreator<
 
   signInWithGoogle: async () => {
     try {
+      if (Capacitor.isNativePlatform()) {
+        await GoogleAuth.initialize();
+        const googleUser = await GoogleAuth.signIn();
+        const idToken = googleUser.authentication.idToken;
+
+        const supabase = getSupabase();
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        });
+        if (error) throw error;
+        return { success: true, message: "تم تسجيل الدخول بحساب Google بنجاح!" };
+      }
+
       const supabase = getSupabase();
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -102,12 +118,18 @@ export const createAuthSlice: StateCreator<
       if (error) throw error;
       return { success: true, message: "جاري إعادة التوجيه إلى تسجيل دخول Google..." };
     } catch (error: any) {
+      console.error("[GoogleSignIn] Raw error:", error);
+      console.error("[GoogleSignIn] Error message:", error?.message);
+      console.error("[GoogleSignIn] Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
       return { success: false, message: error.message || "فشل تسجيل الدخول بـ Google." };
     }
   },
 
   signOut: async () => {
     try {
+      if (Capacitor.isNativePlatform()) {
+        try { await GoogleAuth.signOut(); } catch (_) {}
+      }
       const supabase = getSupabase();
       await supabase.auth.signOut();
     } catch (error) {

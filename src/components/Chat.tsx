@@ -116,7 +116,9 @@ export const Chat: React.FC = () => {
 
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const height = entry.borderBoxSize ? entry.borderBoxSize[0].blockSize : entry.contentRect.height;
+        const box = entry.borderBoxSize;
+        const size = Array.isArray(box) ? box[0] : box;
+        const height = size ? size.blockSize : entry.contentRect.height;
         listEl.style.setProperty('--input-area-height', `${height}px`);
         if (isPinnedRef.current) {
           listEl.scrollTop = listEl.scrollHeight;

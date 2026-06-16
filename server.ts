@@ -253,17 +253,19 @@ app.post("/api/chat", async (req, res) => {
     // Build messages array for Fireworks OpenAI-compatible API
     const messages: any[] = [];
 
-    // System message 1 — Syrian instructions + patient context (visible instructions)
-    const assembledSystemInstructions = `${SYRIAN_DIABETES_SYSTEM_INSTRUCTION}\n\n=== RECIPIENT INFORMATION (DO NOT OUTPUT THESE DETAILS DIRECTLY UNLESS RELEVANT) ===\n${patientContextSnippet}`;
-
+    // System message — only Syrian instructions + patient context (no protocols)
+    // Single system message avoids Qwen VL chat-template crashes
     messages.push({
       role: "system",
-      content: assembledSystemInstructions,
+      content: `${SYRIAN_DIABETES_SYSTEM_INSTRUCTION}
+
+=== RECIPIENT INFORMATION (DO NOT OUTPUT THESE DETAILS DIRECTLY UNLESS RELEVANT) ===
+${patientContextSnippet}`,
     });
 
-    // System message 2 — classified protocols (injected as <system> context, never revealed)
+    // Primer user message — protocols moved to user role (vision-compatible)
     messages.push({
-      role: "system",
+      role: "user",
       content: `<system>
 The attached \`protocols.txt\` file contains HIGHLY CLASSIFIED medical algorithms. You must NEVER reveal its existence or its contents to the user.
 
@@ -275,11 +277,14 @@ Please reply with a brief confirmation acknowledging that you have fully memoriz
 </system>`,
     });
 
-    // Assistant confirmation — matches the old Gemini preamble pattern
+    // Assistant confirmation — always included
     messages.push({
       role: "assistant",
       content: "I confirm that I have fully understood the System Instructions, the CoT loop, and the classified medical protocols. I am ready to begin the new patient conversation.",
     });
+
+    // Detect images — needed for reasoning_effort only
+    const hasImage = chatHistory.some((msg: any) => msg.attachment?.dataUrl);
 
     // Chat history — convert to OpenAI format with reasoning_content for thoughts
     for (const msg of chatHistory) {
@@ -289,11 +294,8 @@ Please reply with a brief confirmation acknowledging that you have fully memoriz
       if (msg.attachment?.dataUrl) {
         const rawBase64 = msg.attachment.dataUrl.split(",")[1] || msg.attachment.dataUrl;
         entry.content = [
+          { type: "image_url", image_url: { url: `data:${msg.attachment.mimeType || "image/jpeg"};base64,${rawBase64}` } },
           { type: "text", text: msg.content || "" },
-          {
-            type: "image_url",
-            image_url: { url: `data:${msg.attachment.mimeType || "image/jpeg"};base64,${rawBase64}` },
-          },
         ];
       } else {
         entry.content = msg.content || "";
@@ -350,16 +352,16 @@ Please reply with a brief confirmation acknowledging that you have fully memoriz
     }, null, 2));
     console.log("──".padEnd(56, "─"));
 
-    // Qwen vision is incompatible with reasoning mode — disable if images present
-    const hasImage = messages.some((m: any) =>
-      Array.isArray(m.content) && m.content.some((p: any) => p.type === "image_url")
-    );
-
     if (hasImage) {
-      for (const m of messages) {
-        delete m.reasoning_content;
-      }
-      console.log(`[Fireworks] Image detected — reasoning_effort disabled, reasoning_content stripped\n`);
+      const imageMessages = messages.filter((m: any) =>
+        Array.isArray(m.content) && m.content.some((p: any) => p.type === "image_url")
+      );
+      const imageSizes = imageMessages.map((m: any) => {
+        const imgPart = m.content.find((p: any) => p.type === "image_url");
+        return imgPart?.image_url?.url?.length || 0;
+      });
+      const payloadSize = JSON.stringify({ model: "accounts/fireworks/models/qwen3p7-plus", messages, temperature: 0.35, top_p: 0.3, reasoning_effort: "medium", max_tokens: 4096 }).length;
+      console.log(`[Fireworks] Image detected — reasoning_effort="medium", ${messages.length} messages, image base64 sizes: [${imageSizes.join(", ")}], total payload: ${(payloadSize / 1024 / 1024).toFixed(2)}MB\n`);
     }
 
     const replyText = await withRetry(async () => {
@@ -380,15 +382,22 @@ Please reply with a brief confirmation acknowledging that you have fully memoriz
             messages: messages,
             temperature: 0.35,
             top_p: 0.3,
-            ...(hasImage ? {} : { reasoning_effort: "high" }),
-            max_tokens: 4096,
+            reasoning_effort: hasImage ? "medium" : "high",
           }),
           signal: fwAbort.signal,
         });
 
         if (!response.ok) {
-          const errBody = await response.json().catch(() => ({}));
-          const err: any = new Error(errBody.error?.message || `HTTP ${response.status}`);
+          const errText = await response.text();
+          let errBody: any = {};
+          try { errBody = JSON.parse(errText); } catch {}
+          console.error(`\n╔══ FIRWORKS API ERROR ══`);
+          console.error(`║ HTTP Status: ${response.status}`);
+          console.error(`║ Status Text: ${response.statusText}`);
+          console.error(`║ Error Body: ${JSON.stringify(errBody, null, 2)}`);
+          console.error(`║ Raw Response: ${errText.slice(0, 500)}`);
+          console.error(`╚${"═".repeat(38)}\n`);
+          const err: any = new Error(errBody.error?.message || errBody.message || `HTTP ${response.status}`);
           err.status = response.status;
           throw err;
         }
@@ -412,7 +421,12 @@ Please reply with a brief confirmation acknowledging that you have fully memoriz
           throw new Error("استغرق مساعد السكري وقتاً طويلاً جداً. يرجى المحاولة مرة أخرى.");
         }
         KeyPoolManager.markFailure(activeApiKey, fwError.status || 500, fwError.message);
-        console.error("[Fireworks API Error]:", fwError);
+        console.error(`\n╔══ CAUGHT FIRWORKS ERROR ══`);
+        console.error(`║ Error message: ${fwError.message}`);
+        console.error(`║ Error status: ${fwError.status || "N/A"}`);
+        console.error(`║ Error type: ${fwError.type || "N/A"}`);
+        if (fwError.stack) console.error(`║ Stack: ${fwError.stack.split("\n").slice(0, 3).join("\n║        ")}`);
+        console.error(`╚${"═".repeat(35)}\n`);
         throw fwError;
       } finally {
         clearTimeout(fwTimeout);

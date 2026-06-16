@@ -217,8 +217,7 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
   };
 
   const handleAttachClick = () => {
-    setSpeechError('قريبا بالتحدي القادم');
-    setTimeout(() => setSpeechError(null), 3000);
+    setShowBottomSheet(true);
   };
 
   const handleFrontCamera = async () => {
@@ -431,8 +430,8 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
               <button
                 type="button"
                 onClick={handleAttachClick}
-                className="p-2 bg-slate-900 border border-slate-800/60 text-slate-500 rounded-xl active:scale-90 transition-colors shrink-0 opacity-50 cursor-not-allowed"
-                title="قريبا بالتحدي القادم"
+                className="p-2 bg-slate-900 border border-slate-800/60 text-slate-400 hover:text-sky-400 hover:border-sky-500/40 rounded-xl active:scale-90 transition-colors shrink-0"
+                title="إرفاق صورة"
               >
                 <Paperclip className="w-3.5 h-3.5" />
               </button>

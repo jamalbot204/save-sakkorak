@@ -53,6 +53,8 @@ export const useAppStore = create<AppStoreState>()(
         activeSessionId: state.activeSessionId,
         lastSyncedAt: state.lastSyncedAt,
         healthDataUpdatedAt: state.healthDataUpdatedAt,
+        session: state.session,
+        user: state.user,
       }),
     }
   )

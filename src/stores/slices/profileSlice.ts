@@ -8,6 +8,7 @@ import { AppStoreState } from '../useAppStore';
 import { UserProfile } from '../../types';
 import { generateUUID } from '../../lib/uuid';
 import { localTimestamp } from '../../lib/datetime';
+import { scheduleDebouncedSync } from '../../lib/syncDebounce';
 
 export interface ProfileSlice {
   deviceId: string;
@@ -22,8 +23,10 @@ export const createProfileSlice: StateCreator<
   ProfileSlice
 > = (set, get) => {
   const triggerBackgroundSync = () => {
-    get().syncWithSupabase().catch((err) => {
-      console.error("[BackgroundSync] Error syncing:", err);
+    scheduleDebouncedSync(() => {
+      get().syncWithSupabase().catch((err) => {
+        console.error("[BackgroundSync] Error syncing:", err);
+      });
     });
   };
 
@@ -34,7 +37,7 @@ export const createProfileSlice: StateCreator<
     setUserProfile: (profile) => {
       const now = localTimestamp();
       set({ userProfile: { ...profile, updatedAt: now } });
-      setTimeout(triggerBackgroundSync, 500);
+      triggerBackgroundSync();
     },
   };
 };

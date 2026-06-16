@@ -8,6 +8,7 @@ import { AppStoreState } from '../useAppStore';
 import { GlucoseReading, MedicationLog, FoodLog, HealthData, Medication } from '../../types';
 import { generateUUID } from '../../lib/uuid';
 import { localTimestamp } from '../../lib/datetime';
+import { scheduleDebouncedSync } from '../../lib/syncDebounce';
 
 export interface HealthSlice {
   healthData: HealthData;
@@ -28,8 +29,10 @@ export const createHealthSlice: StateCreator<
   HealthSlice
 > = (set, get) => {
   const triggerBackgroundSync = () => {
-    get().syncWithSupabase().catch((err) => {
-      console.error("[BackgroundSync] Error syncing:", err);
+    scheduleDebouncedSync(() => {
+      get().syncWithSupabase().catch((err) => {
+        console.error("[BackgroundSync] Error syncing:", err);
+      });
     });
   };
 
@@ -46,7 +49,7 @@ export const createHealthSlice: StateCreator<
       const now = localTimestamp();
       set((state) => {
         const newMed = { ...medication, updatedAt: now };
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: {
             ...state.healthData,
@@ -60,7 +63,7 @@ export const createHealthSlice: StateCreator<
     deleteMedication: (id) => {
       const now = localTimestamp();
       set((state) => {
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: {
             ...state.healthData,
@@ -94,7 +97,7 @@ export const createHealthSlice: StateCreator<
       };
 
       set((state) => {
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: {
             ...state.healthData,
@@ -108,7 +111,7 @@ export const createHealthSlice: StateCreator<
     deleteGlucoseReading: (id) => {
       const nowDel = localTimestamp();
       set((state) => {
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: {
             ...state.healthData,
@@ -131,7 +134,7 @@ export const createHealthSlice: StateCreator<
       if (existingLogIndex >= 0) {
         set((state) => {
           const filtered = state.healthData.medicationLogs.filter((_, i) => i !== existingLogIndex);
-          setTimeout(triggerBackgroundSync, 500);
+          triggerBackgroundSync();
           return {
             healthData: { ...state.healthData, medicationLogs: filtered },
             healthDataUpdatedAt: now
@@ -149,7 +152,7 @@ export const createHealthSlice: StateCreator<
           updatedAt: now
         };
         set((state) => {
-          setTimeout(triggerBackgroundSync, 500);
+          triggerBackgroundSync();
           return {
             healthData: { ...state.healthData, medicationLogs: [newLog, ...state.healthData.medicationLogs] },
             healthDataUpdatedAt: now
@@ -163,7 +166,7 @@ export const createHealthSlice: StateCreator<
         const currentCount = state.healthData.waterLogs[date] || 0;
         const newCount = Math.min(currentCount + 1, 20);
         const now = localTimestamp();
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: {
             ...state.healthData,
@@ -179,7 +182,7 @@ export const createHealthSlice: StateCreator<
         const currentCount = state.healthData.waterLogs[date] || 0;
         if (currentCount <= 0) return state;
         const now = localTimestamp();
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: {
             ...state.healthData,
@@ -200,7 +203,7 @@ export const createHealthSlice: StateCreator<
         updatedAt: now
       };
       set((state) => {
-        setTimeout(triggerBackgroundSync, 500);
+        triggerBackgroundSync();
         return {
           healthData: { ...state.healthData, foodLogs: [newLog, ...state.healthData.foodLogs] },
           healthDataUpdatedAt: now

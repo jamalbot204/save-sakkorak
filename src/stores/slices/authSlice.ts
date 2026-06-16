@@ -124,6 +124,17 @@ export const createAuthSlice: StateCreator<
   },
 
   signOut: async () => {
+    const state = get();
+
+    // دفع أي تغييرات محلية معلقة قبل إلغاء صلاحية الجلسة
+    if (state.user && state.userProfile && state.healthDataUpdatedAt > state.lastSyncedAt) {
+      try {
+        await state.syncWithSupabase();
+      } catch (_) {
+        // المتابعة حتى لو فشلت المزامنة — لا نعطل تسجيل الخروج
+      }
+    }
+
     try {
       if (Capacitor.isNativePlatform()) {
         try { await GoogleAuth.signOut(); } catch (_) {}
@@ -133,7 +144,6 @@ export const createAuthSlice: StateCreator<
     } catch (error) {
       console.error("[Auth] Error signing out:", error);
     } finally {
-      // استدعاء دالة مسح البيانات بالكامل من شريحة المزامنة عبر get() المشترك
       await get().clearAllData();
     }
   },

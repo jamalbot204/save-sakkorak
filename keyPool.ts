@@ -19,9 +19,9 @@ export class KeyPoolManager {
   public static initialize(): void {
     if (this.isInitialized) return;
 
-    const envKeys = process.env.GEMINI_API_KEYS;
+    const envKeys = process.env.FIREWORKS_API_KEYS;
     const rawKeysList = envKeys ? envKeys.split(",") : [];
-    const fallbackKey = process.env.GEMINI_API_KEY;
+    const fallbackKey = process.env.FIREWORKS_API_KEY;
 
     const uniqueKeys = new Set<string>();
 
@@ -48,14 +48,14 @@ export class KeyPoolManager {
     }));
 
     this.isInitialized = true;
-    console.log(`[KeyPoolManager] Initialized with ${this.keys.length} unique Gemini API keys.`);
+    console.log(`[KeyPoolManager] Initialized with ${this.keys.length} unique Fireworks API keys.`);
   }
 
   public static getActiveKey(): string {
     this.initialize();
     
     if (this.keys.length === 0) {
-      throw new Error("No Gemini API keys configured in environment variables GEMINI_API_KEYS or GEMINI_API_KEY.");
+      throw new Error("No Fireworks API keys configured in environment variables FIREWORKS_API_KEYS or FIREWORKS_API_KEY.");
     }
 
     const now = Date.now();

@@ -429,6 +429,9 @@ export const Chat: React.FC = () => {
 
       setIsClearing(true);
 
+      const clearController = new AbortController();
+      const clearTimer = setTimeout(() => clearController.abort(), 10_000);
+
       fetch(base + 'api/chat/clear', {
         method: 'POST',
         headers: {
@@ -436,10 +439,17 @@ export const Chat: React.FC = () => {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ sessionId: oldSessionId }),
+        signal: clearController.signal,
       })
-        .then(() => setIsClearing(false))
+        .then(() => {
+          clearTimeout(clearTimer);
+          setIsClearing(false);
+        })
         .catch((err) => {
-          console.error('[ClearChat] Archive failed:', err);
+          clearTimeout(clearTimer);
+          if (err.name !== 'AbortError') {
+            console.error('[ClearChat] Archive failed:', err);
+          }
           setIsClearing(false);
         });
     }

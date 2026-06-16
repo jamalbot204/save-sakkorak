@@ -15,6 +15,7 @@ import { NotificationService } from './services/NotificationService';
 import { MedicationAlarm } from './plugins/MedicationAlarm';
 import { Capacitor } from '@capacitor/core';
 import { AuthGateway } from './components/AuthGateway';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export default function App() {
   const userProfile = useAppStore((state) => state.userProfile);
@@ -23,6 +24,7 @@ export default function App() {
   const toggleMedicationLog = useAppStore((state) => state.toggleMedicationLog);
   const session = useAppStore((state) => state.session);
   const profileReady = useAppStore((state) => state.profileReady);
+  const medications = useAppStore((state) => state.healthData.medications);
 
   // States
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -123,7 +125,7 @@ export default function App() {
         console.error('[App] Error scheduling reminders:', err);
       });
     }
-  }, [isInitialized, userProfile?.isOnboarded, useAppStore.getState().healthData.medications, userProfile?.medicationTimes]);
+  }, [isInitialized, userProfile?.isOnboarded, medications, userProfile?.medicationTimes]);
 
   // 1. Render Splash Screen
   if (showSplash || !isInitialized) {
@@ -198,9 +200,11 @@ export default function App() {
         hasProfile={true}
       >
         <div className="w-full flex-1 flex flex-col overflow-hidden">
-          {activeTab === 'home' && <Dashboard />}
-          {activeTab === 'chat' && <Chat />}
-          {activeTab === 'settings' && <Settings />}
+          <ErrorBoundary key={activeTab}>
+            {activeTab === 'home' && <Dashboard />}
+            {activeTab === 'chat' && <Chat />}
+            {activeTab === 'settings' && <Settings />}
+          </ErrorBoundary>
         </div>
       </Layout>
 

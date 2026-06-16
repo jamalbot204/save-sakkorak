@@ -32,14 +32,16 @@ export function AuthGateway() {
     setError(null);
     setSuccess(null);
 
-    const res = await sendOtpCode(email.trim());
-    setLoading(false);
-
-    if (res.success) {
-      setSuccess(res.message);
-      setStep('code');
-    } else {
-      setError(res.message);
+    try {
+      const res = await sendOtpCode(email.trim());
+      if (res.success) {
+        setSuccess(res.message);
+        setStep('code');
+      } else {
+        setError(res.message);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,23 +56,27 @@ export function AuthGateway() {
     setError(null);
     setSuccess(null);
 
-    const res = await verifyOtp(email.trim(), code.trim());
-    setLoading(false);
-
-    if (res.success) {
-      setSuccess(res.message);
-      // Store state listeners on session will auto login, no further actions needed!
-    } else {
-      setError(res.message);
+    try {
+      const res = await verifyOtp(email.trim(), code.trim());
+      if (res.success) {
+        setSuccess(res.message);
+      } else {
+        setError(res.message);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
-    const res = await signInWithGoogle();
-    if (!res.success) {
-      setError(res.message);
+    try {
+      const res = await signInWithGoogle();
+      if (!res.success) {
+        setError(res.message);
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -128,107 +134,16 @@ export function AuthGateway() {
           )}
         </AnimatePresence>
 
-        {/* Steps Logic */}
-        <AnimatePresence mode="wait">
-          {step === 'email' ? (
-            <motion.form 
-              key="step-email"
-              initial={{ opacity: 0, x: -15 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 15 }}
-              onSubmit={handleSendOtp} 
-              className="space-y-5"
-            >
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-300 mr-1">البريد الإلكتروني الخاص بك</label>
-                <div className="relative">
-                  <Mail className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                  <input
-                    type="email"
-                    required
-                    disabled={loading}
-                    className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-2xl py-3.5 pr-12 pl-4 text-sm text-slate-100 placeholder-slate-600 font-sans focus:outline-none transition duration-200 text-right"
-                    placeholder="your.email@gmail.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                variant="emerald"
-                className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm transition-all"
-                disabled={loading}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    جاري الإرسال...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    أرسل كود التحقق السري ⚡
-                  </span>
-                )}
-              </Button>
-            </motion.form>
-          ) : (
-            <motion.form 
-              key="step-code"
-              initial={{ opacity: 0, x: 15 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -15 }}
-              onSubmit={handleVerifyOtp} 
-              className="space-y-5"
-            >
-              <div className="space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <button 
-                    type="button" 
-                    onClick={() => { setStep('email'); setError(null); setSuccess(null); }}
-                    className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 focus:outline-none"
-                  >
-                    تعديل البريد <ArrowRight className="w-3.5 h-3.5 rotate-180" />
-                  </button>
-                  <label className="block text-xs font-bold text-slate-300">أدخل كود التحقق (6 أرقام)</label>
-                </div>
-                <div className="relative">
-                  <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                  <input
-                    type="text"
-                    required
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    disabled={loading}
-                    className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-2xl py-3.5 pr-12 pl-4 text-center text-lg tracking-[8px] text-slate-100 placeholder-slate-700 font-mono focus:outline-none transition duration-200"
-                    placeholder="******"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                variant="emerald"
-                className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm transition-all"
-                disabled={loading}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    جاري التحقق...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    تأكيد وتسجيل الدخول 🔑
-                  </span>
-                )}
-              </Button>
-            </motion.form>
-          )}
-        </AnimatePresence>
+        {/* OTP Login — locked until next update */}
+        <div className="p-4 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl text-center space-y-2">
+          <div className="w-9 h-9 mx-auto rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+            <KeyRound className="w-4 h-4 text-slate-500" />
+          </div>
+          <p className="text-xs font-bold text-slate-400">قريباً بالتحديث القادم</p>
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            يرجى تسجيل الدخول بحساب Google حالياً
+          </p>
+        </div>
 
         <div className="relative flex py-1 items-center">
           <div className="flex-grow border-t border-slate-800"></div>

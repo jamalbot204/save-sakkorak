@@ -3,6 +3,7 @@ import { Paperclip, Send, Camera, X, Mic, Square, FolderOpen } from 'lucide-reac
 import { Camera as CapCamera, CameraResultType, CameraSource, CameraDirection } from '@capacitor/camera';
 import { BottomSheet } from '../common/BottomSheet';
 import { AndroidSettingsEx } from '../../plugins/AndroidSettingsEx';
+import { compressImage } from '../../lib/imageCompression';
 
 interface ChatInputAreaProps {
   isTyping: boolean;
@@ -216,7 +217,8 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
   };
 
   const handleAttachClick = () => {
-    setShowBottomSheet(true);
+    setSpeechError('قريبا بالتحدي القادم');
+    setTimeout(() => setSpeechError(null), 3000);
   };
 
   const handleFrontCamera = async () => {
@@ -239,10 +241,11 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
         });
 
         if (image && image.dataUrl) {
+          const compressed = await compressImage(image.dataUrl);
           setAttachment({
             name: `front-capture-${Date.now()}.jpg`,
             mimeType: 'image/jpeg',
-            dataUrl: image.dataUrl,
+            dataUrl: compressed,
           });
         }
       } else {
@@ -283,10 +286,11 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
         });
 
         if (image && image.dataUrl) {
+          const compressed = await compressImage(image.dataUrl);
           setAttachment({
             name: `rear-capture-${Date.now()}.jpg`,
             mimeType: 'image/jpeg',
-            dataUrl: image.dataUrl,
+            dataUrl: compressed,
           });
         }
       } else {
@@ -317,13 +321,26 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      setSpeechError('يرجى اختيار صورة بصيغة PNG أو JPEG فقط.');
+      setTimeout(() => setSpeechError(null), 3500);
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = () => {
-      setAttachment({
-        name: file.name,
-        mimeType: file.type,
-        dataUrl: reader.result as string,
-      });
+    reader.onload = async () => {
+      try {
+        const compressed = await compressImage(reader.result as string);
+        setAttachment({
+          name: file.name,
+          mimeType: 'image/jpeg',
+          dataUrl: compressed,
+        });
+      } catch (err) {
+        console.error('Image compression failed:', err);
+        setSpeechError('تعذر معالجة الصورة. يرجى تجربة صورة أخرى.');
+        setTimeout(() => setSpeechError(null), 3500);
+      }
     };
     reader.readAsDataURL(file);
     setShowBottomSheet(false);
@@ -414,9 +431,8 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
               <button
                 type="button"
                 onClick={handleAttachClick}
-                disabled={isOffline}
-                className="p-2 bg-slate-900 border border-slate-800/60 hover:border-sky-500/30 text-slate-400 hover:text-sky-400 rounded-xl active:scale-90 transition-colors shrink-0 disabled:opacity-35 disabled:pointer-events-none"
-                title="إرفاق صورة"
+                className="p-2 bg-slate-900 border border-slate-800/60 text-slate-500 rounded-xl active:scale-90 transition-colors shrink-0 opacity-50 cursor-not-allowed"
+                title="قريبا بالتحدي القادم"
               >
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
@@ -471,7 +487,7 @@ export const ChatInputArea = React.memo(({ isTyping, onSendMessage, onStopGenera
         type="file" 
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept="image/*"
+        accept="image/png,image/jpeg"
         className="hidden"
       />
 

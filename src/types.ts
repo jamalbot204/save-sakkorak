@@ -71,6 +71,13 @@ export interface HealthData {
   waterLogs: Record<string, number>;
 }
 
+export interface TipCard {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+}
+
 export interface UserProfile extends SyncableRecord {
   name: string;
   age: number;

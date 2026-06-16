@@ -10,8 +10,10 @@ import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './components/Dashboard';
 import { Chat } from './components/Chat';
 import { Settings } from './components/Settings';
+import { Tips } from './components/Tips';
 import { Sparkles, HeartPulse, Activity, RefreshCw } from 'lucide-react';
 import { NotificationService } from './services/NotificationService';
+import { TipsNotificationService } from './services/TipsNotificationService';
 import { MedicationAlarm } from './plugins/MedicationAlarm';
 import { Capacitor } from '@capacitor/core';
 import { AuthGateway } from './components/AuthGateway';
@@ -30,6 +32,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
   const [showSplash, setShowSplash] = useState<boolean>(true);
   const [batteryIgnored, setBatteryIgnored] = useState<boolean>(true);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showOptimizationModal, setShowOptimizationModal] = useState<boolean>(false);
 
   // Check if app was launched from 'Take Medication' native action
@@ -124,6 +127,9 @@ export default function App() {
       NotificationService.scheduleMedicationReminders().catch((err) => {
         console.error('[App] Error scheduling reminders:', err);
       });
+      TipsNotificationService.scheduleDailyTipReminders().catch((err) => {
+        console.error('[App] Error scheduling tip reminders:', err);
+      });
     }
   }, [isInitialized, userProfile?.isOnboarded, medications, userProfile?.medicationTimes]);
 
@@ -194,19 +200,20 @@ export default function App() {
   // 3. Render Normal Dashboard Console Layout tabs
   return (
     <>
-      <Layout 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        hasProfile={true}
-      >
-        <div className="w-full flex-1 flex flex-col overflow-hidden">
-          <ErrorBoundary key={activeTab}>
-            {activeTab === 'home' && <Dashboard />}
-            {activeTab === 'chat' && <Chat />}
-            {activeTab === 'settings' && <Settings />}
-          </ErrorBoundary>
-        </div>
-      </Layout>
+        <Layout 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab} 
+          hasProfile={true}
+          onOpenSettings={() => setShowSettings(true)}
+        >
+          <div className="w-full flex-1 flex flex-col overflow-hidden">
+            <ErrorBoundary key={activeTab}>
+              {activeTab === 'home' && <Dashboard showSettings={showSettings} onOpenSettings={() => setShowSettings(true)} onCloseSettings={() => setShowSettings(false)} />}
+              {activeTab === 'chat' && <Chat />}
+              {activeTab === 'tips' && <Tips />}
+            </ErrorBoundary>
+          </div>
+        </Layout>
 
       {showOptimizationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">

@@ -1,5 +1,7 @@
 package com.sokkarak.mazboot;
 
+import android.app.NotificationManager;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -16,6 +18,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MedicationAlarmPlugin.class);
         registerPlugin(GoogleAuth.class);
         super.onCreate(savedInstanceState);
+
+        handleTakeMedicationNotification(getIntent());
 
         // Full Screen Intent / Alarm Clock config: Wake up screen and show over Lock Screen
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -69,8 +73,20 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onNewIntent(android.content.Intent intent) {
+    protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        handleTakeMedicationNotification(intent);
+    }
+
+    private void handleTakeMedicationNotification(Intent intent) {
+        if (!"TAKE_MEDICATION".equals(intent.getAction())) return;
+        int notifId = intent.getIntExtra("notificationId", -1);
+        if (notifId == -1) return;
+
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.cancel(notifId);
+        }
     }
 }

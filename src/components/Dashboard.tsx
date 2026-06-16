@@ -14,10 +14,17 @@ import { GlucoseLogModal } from './dashboard/GlucoseLogModal';
 import { AddMedicationModal } from './dashboard/AddMedicationModal';
 import { MedicationManagerModal } from './dashboard/MedicationManagerModal';
 import { ExtendedGlucoseModal } from './dashboard/ExtendedGlucoseModal';
+import { Settings } from './Settings';
 import { Medication } from '../types';
 import { isOnline, subscribeToNetwork } from '../lib/networkStatus';
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+  showSettings?: boolean;
+  onOpenSettings?: () => void;
+  onCloseSettings?: () => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ showSettings, onOpenSettings, onCloseSettings }) => {
   const userProfile = useAppStore((state) => state.userProfile);
   const healthData = useAppStore((state) => state.healthData);
 
@@ -134,6 +141,16 @@ export const Dashboard: React.FC = () => {
     }
   }, [addMedication]);
 
+  const handleDeleteMedication = useCallback(async (medication: Medication) => {
+    try {
+      const { NotificationService } = await import('../services/NotificationService');
+      await NotificationService.cancelMedicationAlarms(medication.id, medication.timeSlots || []);
+    } catch (e) {
+      console.error('[Dashboard] Failed to cancel alarms for deleted med:', e);
+    }
+    useAppStore.getState().deleteMedication(medication.id);
+  }, []);
+
   const latestReading = healthData.glucoseReadings[0];
 
   return (
@@ -144,6 +161,7 @@ export const Dashboard: React.FC = () => {
         lastSyncStatus={lastSyncStatus}
         isOffline={isOffline}
         onForceSync={syncWithSupabase}
+        onOpenSettings={onOpenSettings || (() => {})}
       />
 
       <BloodGlucoseCard 
@@ -191,6 +209,7 @@ export const Dashboard: React.FC = () => {
         <MedicationManagerModal
           onClose={handleCloseMedicationManager}
           onSaveMedication={handleSaveMedication}
+          onDeleteMedication={handleDeleteMedication}
         />
       )}
 
@@ -198,6 +217,22 @@ export const Dashboard: React.FC = () => {
         <ExtendedGlucoseModal
           onClose={handleCloseDetailedModal}
         />
+      )}
+
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 bg-slate-950/95 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+          <div className="w-full max-w-[430px] h-[100dvh] md:h-[880px] bg-slate-950 md:rounded-[48px] md:shadow-2xl overflow-y-auto md:border-8 md:border-slate-800 flex flex-col relative">
+            <button
+              onClick={onCloseSettings}
+              className="absolute top-3 right-3 z-10 p-2 bg-slate-900/80 border border-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition-colors active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <Settings />
+          </div>
+        </div>
       )}
     </div>
   );

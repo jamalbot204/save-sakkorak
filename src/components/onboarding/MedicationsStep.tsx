@@ -13,7 +13,6 @@ interface MedicationsStepProps {
 export const MedicationsStep = React.memo(({ medications, onAddMedication, onRemoveMedication }: MedicationsStepProps) => {
   const [currentMedName, setCurrentMedName] = useState<string>('');
   const [currentMedDosage, setCurrentMedDosage] = useState<string>('');
-  const [currentMedFreq, setCurrentMedFreq] = useState<string>('مرة يومياً');
   const [selectedSlots, setSelectedSlots] = useState<string[]>(['Breakfast']);
 
   const toggleSlotSelection = useCallback((slot: string) => {
@@ -29,20 +28,29 @@ export const MedicationsStep = React.memo(({ medications, onAddMedication, onRem
     });
   }, []);
 
+  const arabicFreqLabels: Record<number, string> = {
+    1: 'مرة يومياً',
+    2: 'مرتين يومياً',
+    3: 'ثلاث مرات يومياً',
+    4: 'أربع مرات يومياً',
+  };
+  const frequencyPreview = arabicFreqLabels[selectedSlots.length] || `${selectedSlots.length} مرات يومياً`;
+
   const handleAdd = useCallback(() => {
     if (!currentMedName.trim()) return;
+    const computedFrequency = arabicFreqLabels[selectedSlots.length] || `${selectedSlots.length} مرات يومياً`;
     const newMed: Medication = {
       id: generateUUID(),
       name: currentMedName,
       dosage: currentMedDosage || 'طبيعي',
-      frequency: currentMedFreq,
+      frequency: computedFrequency,
       timeSlots: selectedSlots,
       updatedAt: localTimestamp(),
     };
     onAddMedication(newMed);
     setCurrentMedName('');
     setCurrentMedDosage('');
-  }, [currentMedName, currentMedDosage, currentMedFreq, selectedSlots, onAddMedication]);
+  }, [currentMedName, currentMedDosage, selectedSlots, onAddMedication]);
 
   return (
     <div className="space-y-4 animate-fadeIn">
@@ -66,30 +74,15 @@ export const MedicationsStep = React.memo(({ medications, onAddMedication, onRem
           />
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 mb-1.5">الجرعة (عيار)</label>
-            <input 
-              type="text"
-              value={currentMedDosage}
-              onChange={(e) => setCurrentMedDosage(e.target.value)}
-              placeholder="مثال: 500 ملغ، 15 وحدة"
-              className="w-full bg-slate-950/80 border border-slate-800 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-600 font-medium"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 mb-1.5">التكرار</label>
-            <select
-              value={currentMedFreq}
-              onChange={(e) => setCurrentMedFreq(e.target.value)}
-              className="w-full bg-slate-950/80 border border-slate-800 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-slate-200 font-medium"
-            >
-              <option value="مرة يومياً">مرة يومياً</option>
-              <option value="مرتين يومياً">مرتين يومياً</option>
-              <option value="ثلاث مرات">ثلاث مرات يومياً</option>
-              <option value="عند اللزوم">عند اللزوم</option>
-            </select>
-          </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 mb-1.5">الجرعة (عيار)</label>
+          <input 
+            type="text"
+            value={currentMedDosage}
+            onChange={(e) => setCurrentMedDosage(e.target.value)}
+            placeholder="مثال: 500 ملغ، 15 وحدة"
+            className="w-full bg-slate-950/80 border border-slate-800 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-600 font-medium"
+          />
         </div>
 
         {/* Timing slots selectors for medication */}
@@ -120,6 +113,12 @@ export const MedicationsStep = React.memo(({ medications, onAddMedication, onRem
               );
             })}
           </div>
+        </div>
+
+        {/* Live frequency preview */}
+        <div className="px-3 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl text-center">
+          <span className="text-[10px] font-bold text-slate-500">معدل أخذ الدواء الحالي:</span>
+          <span className="text-xs font-extrabold text-emerald-400 mr-2">{frequencyPreview}</span>
         </div>
 
         <button

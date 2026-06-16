@@ -70,31 +70,27 @@ interface AddMedicationModalProps {
 export const AddMedicationModal: React.FC<AddMedicationModalProps> = ({ onClose, onSave }) => {
   const [currentMedName, setCurrentMedName] = useState<string>('');
   const [currentMedDosage, setCurrentMedDosage] = useState<string>('');
-  const [currentMedFreq, setCurrentMedFreq] = useState<string>('مرة يومياً');
   const [method, setMethod] = useState<'preset' | 'custom'>('preset');
   const [selectedSlots, setSelectedSlots] = useState<string[]>(['Breakfast']);
   const [customTimes, setCustomTimes] = useState<{hour: string, minute: string, period: 'AM'|'PM'}[]>([
     { hour: '08', minute: '00', period: 'AM' }
   ]);
 
-  useEffect(() => {
-    let count = 1;
-    if (currentMedFreq.includes('مرتين')) count = 2;
-    else if (currentMedFreq.includes('ثلاث')) count = 3;
-    
-    setCustomTimes(prev => {
-      if (prev.length === count) return prev;
-      if (prev.length < count) {
-        const newTimes = [...prev];
-        while (newTimes.length < count) {
-          newTimes.push({ hour: '08', minute: '00', period: 'AM' });
-        }
-        return newTimes;
-      } else {
-        return prev.slice(0, count);
-      }
-    });
-  }, [currentMedFreq]);
+  const customTimeLabels = ['الجرعة الأولى', 'الجرعة الثانية', 'الجرعة الثالثة', 'الجرعة الرابعة', 'الجرعة الخامسة', 'الجرعة السادسة'];
+
+  const frequencyPreview = (() => {
+    const arabicLabels: Record<number, string> = {
+      0: 'لم يتم اختيار موعد',
+      1: 'مرة يومياً',
+      2: 'مرتين يومياً',
+      3: 'ثلاث مرات يومياً',
+      4: 'أربع مرات يومياً',
+      5: 'خمس مرات يومياً',
+      6: 'ست مرات يومياً',
+    };
+    const n = method === 'preset' ? selectedSlots.length : customTimes.length;
+    return arabicLabels[n] || `${n} مرات يومياً`;
+  })();
 
   const toggleSlotSelection = useCallback((slot: string) => {
     setMethod('preset');
@@ -121,16 +117,27 @@ export const AddMedicationModal: React.FC<AddMedicationModalProps> = ({ onClose,
       finalSlots = customTimes.map(ct => `${ct.hour}:${ct.minute} ${ct.period}`);
     }
 
+    const arabicFreqLabels: Record<number, string> = {
+      1: 'مرة يومياً',
+      2: 'مرتين يومياً',
+      3: 'ثلاث مرات يومياً',
+      4: 'أربع مرات يومياً',
+      5: 'خمس مرات يومياً',
+      6: 'ست مرات يومياً',
+    };
+    const finalSlotCount = method === 'preset' ? selectedSlots.length : customTimes.length;
+    const computedFrequency = arabicFreqLabels[finalSlotCount] || `${finalSlotCount} مرات يومياً`;
+
     const newMed: Medication = {
       id: generateUUID(),
       name: currentMedName.trim(),
       dosage: currentMedDosage.trim() || 'طبيعي',
-      frequency: currentMedFreq,
+      frequency: computedFrequency,
       timeSlots: finalSlots,
       updatedAt: localTimestamp(),
     };
     onSave(newMed);
-  }, [currentMedName, currentMedDosage, currentMedFreq, method, selectedSlots, customTimes, onSave]);
+  }, [currentMedName, currentMedDosage, method, selectedSlots, customTimes, onSave]);
 
   return (
     <div className="absolute inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir="rtl">
@@ -177,26 +184,13 @@ export const AddMedicationModal: React.FC<AddMedicationModalProps> = ({ onClose,
             placeholder="مثال: مميع، أنسولين لانتوس، ميتفورمين"
           />
           
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="الجرعة (عيار)"
-              type="text"
-              value={currentMedDosage}
-              onChange={(e) => setCurrentMedDosage(e.target.value)}
-              placeholder="مثال: 500 ملغ"
-            />
-            <Input
-              label="التكرار"
-              as="select"
-              value={currentMedFreq}
-              onChange={(e: any) => setCurrentMedFreq(e.target.value)}
-            >
-              <option value="مرة يومياً">مرة يومياً</option>
-              <option value="مرتين يومياً">مرتين يومياً</option>
-              <option value="ثلاث مرات">ثلاث مرات يومياً</option>
-              <option value="عند اللزوم">عند اللزوم</option>
-            </Input>
-          </div>
+          <Input
+            label="الجرعة (عيار)"
+            type="text"
+            value={currentMedDosage}
+            onChange={(e) => setCurrentMedDosage(e.target.value)}
+            placeholder="مثال: 500 ملغ"
+          />
 
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-2">مواعيد أخذ الجرعة (اختر طريقة واحدة)</label>
@@ -257,8 +251,21 @@ export const AddMedicationModal: React.FC<AddMedicationModalProps> = ({ onClose,
                   <div key={idx} className="bg-slate-950/40 p-2.5 rounded-2xl border border-slate-800/80 space-y-2 flex flex-col">
                     <div className="flex justify-between items-center px-1">
                       <span className="text-xs font-bold text-emerald-400">
-                        {idx === 0 ? 'الجرعة الأولى' : idx === 1 ? 'الجرعة الثانية' : 'الجرعة الثالثة'}
+                        {customTimeLabels[Math.min(idx, 5)]}
                       </span>
+                      {customTimes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMethod('custom');
+                            setCustomTimes(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="w-5 h-5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] flex items-center justify-center hover:bg-rose-500/20 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                     <div dir="ltr" className="flex items-center justify-center gap-2 p-1 bg-slate-900/40 rounded-xl border border-slate-800/40">
                       <ScrollPicker
@@ -298,8 +305,29 @@ export const AddMedicationModal: React.FC<AddMedicationModalProps> = ({ onClose,
                   </div>
                 ))}
               </div>
+
+              {customTimes.length < 6 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMethod('custom');
+                    setCustomTimes(prev => [...prev, { hour: '08', minute: '00', period: 'AM' }]);
+                  }}
+                  className="mt-2 w-full py-2 bg-slate-800/40 border border-dashed border-slate-700 rounded-xl text-[10px] font-bold text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-all flex items-center justify-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>إضافة وقت جديد</span>
+                </button>
+              )}
             </div>
           </div>
+        </div>
+
+        {/* Live frequency preview */}
+        <div className="px-3 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl text-center shrink-0">
+          <span className="text-[10px] font-bold text-slate-500">معدل أخذ الدواء الحالي:</span>
+          <span className="text-xs font-extrabold text-emerald-400 mr-2">{frequencyPreview}</span>
         </div>
 
         <div className="pt-3 shrink-0 border-t border-slate-800/60 mt-auto">

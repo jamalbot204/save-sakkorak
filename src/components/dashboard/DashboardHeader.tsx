@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertTriangle, Settings2 } from 'lucide-react';
 
 interface DashboardHeaderProps {
   userName?: string;
@@ -12,6 +12,7 @@ interface DashboardHeaderProps {
   lastSyncStatus: 'idle' | 'synced' | 'failed';
   isOffline: boolean;
   onForceSync: () => Promise<void>;
+  onOpenSettings: () => void;
 }
 
 export const DashboardHeader = React.memo(({
@@ -19,7 +20,8 @@ export const DashboardHeader = React.memo(({
   isSyncing,
   lastSyncStatus,
   isOffline,
-  onForceSync
+  onForceSync,
+  onOpenSettings,
 }: DashboardHeaderProps) => {
 
   // دالة إطلاق المزامنة اليدوية عند النقر على المؤشر
@@ -83,19 +85,30 @@ export const DashboardHeader = React.memo(({
         <h1 className="text-lg font-bold text-slate-100 Shami mt-0.5">أهلاً، {userName || ''}</h1>
       </div>
       
-      {/* زر المؤشر التفاعلي */}
-      <button
-        onClick={handleSyncClick}
-        disabled={isSyncing}
-        className={`p-2.5 min-w-[85px] bg-slate-950/80 rounded-2xl border border-slate-800 shadow-inner text-center transition-all duration-200 active:scale-95 ${
-          isSyncing
-            ? 'cursor-not-allowed opacity-80' 
-            : 'cursor-pointer hover:border-slate-700'
-        }`}
-        title="اضغط لإطلاق مزامنة فورية مع السحابة"
-      >
-        {renderSyncStatus()}
-      </button>
+      <div className="flex items-center gap-2">
+        {/* زر المؤشر التفاعلي */}
+        <button
+          onClick={handleSyncClick}
+          disabled={isSyncing}
+          className={`p-2.5 min-w-[85px] bg-slate-950/80 rounded-2xl border border-slate-800 shadow-inner text-center transition-all duration-200 active:scale-95 ${
+            isSyncing
+              ? 'cursor-not-allowed opacity-80' 
+              : 'cursor-pointer hover:border-slate-700'
+          }`}
+          title="اضغط لإطلاق مزامنة فورية مع السحابة"
+        >
+          {renderSyncStatus()}
+        </button>
+
+        {/* زر الإعدادات */}
+        <button
+          onClick={onOpenSettings}
+          className="p-2.5 bg-slate-950/80 rounded-2xl border border-slate-800 shadow-inner text-slate-400 hover:text-slate-200 hover:border-slate-700 transition-all duration-200 active:scale-95 cursor-pointer"
+          title="الإعدادات"
+        >
+          <Settings2 className="w-5 h-5" strokeWidth={2} />
+        </button>
+      </div>
     </div>
   );
 });

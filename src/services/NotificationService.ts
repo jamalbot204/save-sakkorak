@@ -162,6 +162,42 @@ export class NotificationService {
   }
 
   /**
+   * Cancel all pending alarms for a specific medication by ID.
+   */
+  static async cancelMedicationAlarms(medicationId: string, timeSlots: string[]): Promise<void> {
+    const isNative = Capacitor.isNativePlatform();
+    const state = useAppStore.getState();
+    const profile = state.userProfile;
+    const medicationTimes = profile?.medicationTimes || {};
+
+    for (const slot of timeSlots) {
+      let rawTime = (medicationTimes as any)[slot];
+      if (!rawTime && (slot.includes(':') || slot.includes('AM') || slot.includes('PM'))) {
+        rawTime = slot;
+      }
+      if (!rawTime) continue;
+
+      const timeParsed = parseTime(rawTime);
+      if (!timeParsed) continue;
+
+      const alarmDate = getNextAlarmTime(timeParsed.hour, timeParsed.minute);
+      const timestamp = alarmDate.getTime();
+      const alarmMedicationId = `${medicationId}_${slot}`;
+
+      if (!isNative) {
+        console.log(`[NotificationService] Mock cancel alarm for "${alarmMedicationId}"`);
+        continue;
+      }
+
+      try {
+        await MedicationAlarm.cancelExactAlarm({ timestamp, medicationId: alarmMedicationId });
+      } catch (err) {
+        console.warn(`[NotificationService] Cancel alarm failed for "${alarmMedicationId}":`, err);
+      }
+    }
+  }
+
+  /**
    * Cancel and clear scheduled local alarms
    */
   static async clearAllNotifications(): Promise<void> {

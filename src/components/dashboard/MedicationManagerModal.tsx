@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Pill, Plus, X, Calendar, Clock, CheckCircle2, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Pill, Plus, X, Calendar, Clock, CheckCircle2, ChevronRight, AlertCircle, Sparkles, Trash2 } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
 import { Medication, MedicationLog } from '../../types';
 import { AddMedicationModal } from './AddMedicationModal';
@@ -9,6 +9,7 @@ import { Button } from '../common/Button';
 interface MedicationManagerModalProps {
   onClose: () => void;
   onSaveMedication: (medication: Medication) => Promise<void>;
+  onDeleteMedication?: (medication: Medication) => Promise<void>;
 }
 
 // Arabic weekday translation helpers
@@ -154,13 +155,14 @@ const MedicationStatusBadge = React.memo<{
 });
 MedicationStatusBadge.displayName = 'MedicationStatusBadge';
 
-export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ onClose, onSaveMedication }) => {
+export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ onClose, onSaveMedication, onDeleteMedication }) => {
   const userProfile = useAppStore((state) => state.userProfile);
   const healthData = useAppStore((state) => state.healthData);
   const toggleMedicationLog = useAppStore((state) => state.toggleMedicationLog);
 
   const [showAddInModal, setShowAddInModal] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toLocaleDateString('en-CA'));
+  const [confirmDeleteData, setConfirmDeleteData] = useState<Medication | null>(null);
   const [confirmUntickData, setConfirmUntickData] = useState<{
     medId: string;
     medName: string;
@@ -314,6 +316,12 @@ export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ 
     await onSaveMedication(newMed);
     setShowAddInModal(false);
   }, [onSaveMedication]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!confirmDeleteData || !onDeleteMedication) return;
+    await onDeleteMedication(confirmDeleteData);
+    setConfirmDeleteData(null);
+  }, [confirmDeleteData, onDeleteMedication]);
 
   return (
     <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex flex-col justify-end sm:justify-center p-0 sm:p-5" dir="rtl">
@@ -475,6 +483,19 @@ export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ 
                         </div>
                       </div>
 
+                      {onDeleteMedication && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteData(item.medication);
+                          }}
+                          className="w-8 h-8 rounded-lg bg-rose-500/5 border border-rose-500/10 text-rose-400/60 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20 flex items-center justify-center shrink-0 transition-all active:scale-90"
+                          title="حذف الدواء"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
                       <div className="flex flex-col items-end pl-1 shrink-0 select-none font-sans">
                         {item.parsedTime ? (
                           <MedicationStatusBadge
@@ -568,6 +589,56 @@ export const MedicationManagerModal: React.FC<MedicationManagerModalProps> = ({ 
                 >
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>نعم، إلغاء التسجيل</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom confirmation modal for deleting a medication */}
+      <AnimatePresence>
+        {confirmDeleteData && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.25 }}
+              style={{ willChange: 'transform, opacity' }}
+              className="w-full max-w-xs bg-slate-900 border border-slate-800/90 rounded-3xl p-5 shadow-2xl space-y-4 text-right"
+              dir="rtl"
+            >
+              <div className="flex items-center gap-3 border-b border-slate-800/80 pb-3">
+                <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-rose-400">تأكيد حذف الدواء</h3>
+                  <p className="text-[9px] text-slate-500 font-semibold">DANGER ZONE</p>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-300 leading-relaxed font-sans">
+                هل أنت متأكد من حذف دواء <strong className="text-slate-100">{confirmDeleteData.name}</strong> ({confirmDeleteData.dosage})؟ سيتم حذف جميع تنبيهاته المجدولة من نظام المنبهات ولا يمكن التراجع عن هذا الإجراء.
+              </p>
+
+              <div className="flex gap-2 pt-1 font-sans">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteData(null)}
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-755 text-slate-300 font-bold text-[10px] rounded-lg border border-slate-700/40 transition-colors active:scale-95"
+                >
+                  تراجع وإلغاء
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-[10px] rounded-lg transition-colors active:scale-95 shadow-md shadow-rose-600/10 flex items-center justify-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>نعم، احذف الدواء</span>
                 </button>
               </div>
             </motion.div>
